@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: okms-secret-fetcher-config
+  namespace: okms
+data:
+  OKMS_REST: "https://eu-west-lim.okms.ovh.net"
+  SECRET_UPN: "urn:v1:eu:resource:okms:61bb24dc-4f5e-40de-a939-a1fdd1aa8f3f/secret/poc%2Fvpn"
+  SECRET_KV_KEY: "shared-key"
+  # Where the initContainer should write the secret value:
+  SECRET_OUT_FILE: "/work/shared-key.txt"
