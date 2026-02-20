@@ -1,0 +1,85 @@
+{{ template "doc.header" . }}
+
+
+The tpl chart is a Helm library chart that provides reusable templates for common Kubernetes configurations. It currently includes templates for:
+
+* Tolerations
+* Resource requests/limits
+* Node selectors
+* Service accounts
+* Labels and selectors
+* Namespace annotations
+* Additional annotations/labels
+* Match expressions/labels
+* Sleep timer for jobs
+* security context
+* Pod security context
+
+Instead of defining them in other Charts multiple times, it is possible to simply include the template.
+
+{{ template "doc.deps" . }}
+
+No dependencies
+
+{{ template "doc.maintainer_and_sources" . }}
+
+{{ template "doc.values" . }}
+
+## Example values
+
+```yaml
+---
+# Examples values file
+
+tolerations:
+  - effect: NoSchedule
+    key: infra
+    operator: Equal
+    value: reserved
+    tolerationSeconds: 600
+  - effect: NoSchedule
+    key: infra
+    operator: Equal
+    value: reserved
+    tolerationSeconds: 600
+
+resources:
+  requests:
+    cpu: 4
+    memory: 8
+    ephemeral-storage: 50
+  limits:
+    cpu: 8
+    memory: 16
+    ephemeral-storage: 500
+
+nodeSelector:
+  key: node-role.kubernetes.io/infra
+  value: ''
+
+namespace:
+  bindtoNode:
+    role: infra
+  additionalAnnotations:
+    additionalAnnotation1: "My Annotation"
+    additionalAnnotation2: "My Annotation 2"
+  additionalLabels:
+    myLabel1: "My Label"
+    myLabel2: "My Labe 2"
+
+namespaceSelector:          
+  matchLabels:
+    kubernetes.io/metadata.name: "openshift-dns"
+
+matchExpressions:    
+  - key: kubernetes.io/metadata.name
+    operator: NotIn
+    values:
+      - "kube-system"
+      - "openshift*"
+      - "default"
+      - "kubde-info"  
+
+```
+
+{{ template "doc.footer" . }}

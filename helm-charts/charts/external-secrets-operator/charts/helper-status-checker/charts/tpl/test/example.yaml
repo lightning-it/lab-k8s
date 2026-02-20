@@ -1,0 +1,43 @@
+{{- /* Set tolerations */}}
+{{- if .Values.tolerations }}
+{{ include "tpl.tolerations" .Values.tolerations  | indent 0 }}
+{{- end }}
+
+{{- /* Set resources */}}
+{{- if .Values.resources }}
+{{ include "tpl.resources" .Values.resources  | indent 0 }}
+{{- end }}
+
+{{- /* Set nodeSelector */}}
+{{- if .Values.nodeSelector }}
+{{- include "tpl.nodeSelector" .Values  | indent 0 }}
+{{- end }}
+
+{{- if .Values.namespace.bindtoNode }}
+  {{- if .Values.namespace.bindtoNode.role }}
+  {{- include "tpl.bindtoNode" .Values.namespace.bindtoNode | nindent 0 }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.namespace.bindtoNode }}
+  {{- if .Values.namespace.bindtoNode.role }}
+  {{- include "tpl.bindtoNode" .Values.namespace.bindtoNode | nindent 0 }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.namespace.binddescrtoNode }}
+  {{- include "tpl.namespaceDescr" .Values.namespace.descr | nindent 0 }}
+{{- end }}
+
+{{- if .Values.namespace.display }}
+  {{- include "tpl.namespaceDisplay" .Values.namespace.display | nindent 0 }}
+{{- end }}
+
+{{- /* Set securityContext */}}
+{{- if .Values.securityContext }}
+  {{ include "tpl.securityContext" .Values.securityContext | indent 0 }}
+{{- end }}
+
+{{- if .Values.podSecurityContext }}
+{{ include "tpl.podSecurityContext" .Values.podSecurityContext | indent 6 }}
+{{- end }}

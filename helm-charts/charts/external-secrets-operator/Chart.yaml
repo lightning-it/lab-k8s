@@ -1,9 +1,9 @@
 apiVersion: v2
-name: cert-manager-operator
-description: Master chart to deploy and configure cert-manager
+name: external-secrets-operator
+description: Master chart to deploy and configure External Secrets operator
 version: 1.0.0
 home: >-
-  https://github.com/lightning-it/lab-k8s/tree/ovh/charts/cert-manager-operator
+  https://github.com/lightning-it/lab-k8s/tree/ovh/charts/external-secrets-operator
 dependencies:
   - name: helper-operator
     repository: https://github.com/lightning-it/helm-charts/charts/helper-operator
