@@ -18,7 +18,7 @@ helper-operator:
         sourceNamespace: olm
         csv: external-secrets-operator.v0.11.0
       operatorgroup:
-        create: false
+        create: true
         notownnamespace: false
 
 # Using sub-chart helper-status-checker
