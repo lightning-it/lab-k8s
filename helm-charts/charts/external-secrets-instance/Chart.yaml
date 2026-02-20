@@ -1,0 +1,6 @@
+apiVersion: v2
+name: external-secrets-instance
+description: Master chart to configure External Secrets
+version: 1.0.0
+home: >-
+  https://github.com/lightning-it/lab-k8s/tree/ovh/charts/external-secrets-instance
