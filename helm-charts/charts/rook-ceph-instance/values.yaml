@@ -2,7 +2,7 @@
 global:
   baseDomain: pleaseoverwrite.com
   envName: kub01
-  suffix: apps
+  ingressSuffix: apps
 
 rook-ceph-cluster:
   # -- Namespace of the main rook operator

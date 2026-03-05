@@ -2,6 +2,6 @@
 {{- if .Values.appsDomain -}}
   {{ .Values.appsDomain }}
 {{- else -}}
-  {{- printf "%s.%s.%s" .Values.global.suffix .Values.global.envName .Values.global.baseDomain -}}
+  {{- printf "%s.%s.%s" .Values.global.ingressSuffix .Values.global.envName .Values.global.baseDomain -}}
 {{- end }}
 {{- end }}
