@@ -1,0 +1,65 @@
+---
+# ============================================================
+# Vault AppRole Authentication (used by vault-Issuer)
+# ============================================================
+vaultAppRoleSecret:
+  name: cert-manager-vault-approle
+  namespace: cert-manager-operator
+  syncwave: '0'
+  secret: pleaseoverwrite  # only used if css_enabled: false
+
+# ============================================================
+# ClusterSecretStore (External Secrets Operator)
+# ============================================================
+css:
+  enabled: false
+  name: hashicorp-vault
+  # Pfad für Vault AppRole Secret
+  vaultSecretPath: yourcluster/cert-manager
+  # Pfad für Cloudflare Token
+  cloudflareSecretPath: yourcluster/cloudflare
+  cloudflareSecretProperty: api-token
+
+# ============================================================
+# Issuer configuration
+# ============================================================
+issuer:
+  vault:
+    enabled: true
+    name: cluster-issuer
+    syncwave: '1'
+    hashicorpVault:
+      path: pki-inter-ec-2025/sign/pleaseoverwrite
+      server: https://vault.apps.pleaseoverwrite.com
+      namespace: ""
+      appRole:
+        path: approle
+        id: pleaseoverwrite
+      caBundleSecretRef:
+        syncwave: '1'
+        name: cert-manager-vault-ssl-cert
+        value: pleaseoverwrite
+
+  letsencrypt:
+    enabled: false
+    name: letsencrypt-prod
+    syncwave: '1'
+    # staging for testing: https://acme-staging-v02.api.letsencrypt.org/directory
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@example.com
+    cloudflare:
+      # used if css.enabled: false
+      token: pleaseoverwrite
+
+# ============================================================
+# Wildcard Certificate (optional)
+# ============================================================
+certificate:
+  enabled: false
+  name: apps-wildcard
+  namespace: kube-system
+  secretName: apps-wildcard-tls
+  syncwave: '2'
+  issuerName: letsencrypt-prod
+  dnsNames:
+    - "*.apps.cluster.example.com"
