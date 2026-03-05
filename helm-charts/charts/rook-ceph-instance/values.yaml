@@ -1,6 +1,8 @@
 ---
 global:
-  domain: pleaseoverwrite.com
+  baseDomain: pleaseoverwrite.com
+  envName: kub01
+  suffix: apps
 
 rook-ceph-cluster:
   # -- Namespace of the main rook operator

@@ -10,7 +10,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: rook-ceph.{{ .Values.global.domain }}
+  - host: rook-ceph.{{ include "global.appsDomain" . }}
     http:
       paths:
       - path: /
