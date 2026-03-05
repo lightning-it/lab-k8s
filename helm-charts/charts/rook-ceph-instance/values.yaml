@@ -1,4 +1,7 @@
 ---
+global:
+  domain: pleaseoverwrite.com
+
 rook-ceph-cluster:
   # -- Namespace of the main rook operator
   operatorNamespace: rook-ceph
