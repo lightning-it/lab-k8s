@@ -9,3 +9,5 @@ css_ca_bundle: null
 css_vault_server: https://vault
 css_vault_namespace: null
 css_vault_path: stage-2c
+css_hashicorp: true
+css_ovh: false
