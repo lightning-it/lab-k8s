@@ -16,6 +16,37 @@ BEGIN = "<!-- BEGIN LIT_SHARED_RELEASE_MODEL -->"
 END = "<!-- END LIT_SHARED_RELEASE_MODEL -->"
 QUALITY_BEGIN = "<!-- BEGIN LIT_QUALITY_BADGES -->"
 QUALITY_END = "<!-- END LIT_QUALITY_BADGES -->"
+COMPAT_BEGIN = "<!-- BEGIN LIT_COMPATIBILITY_MATRIX -->"
+COMPAT_END = "<!-- END LIT_COMPATIBILITY_MATRIX -->"
+RELEASE_QUALITY_BEGIN = "<!-- BEGIN LIT_RELEASE_QUALITY_MODEL -->"
+RELEASE_QUALITY_END = "<!-- END LIT_RELEASE_QUALITY_MODEL -->"
+DISALLOWED_GENERATED_TERMS = [
+    "Production Ready",
+    "Enterprise Ready",
+    "Battle Tested",
+    "100% Tested",
+    "github/stars",
+    "github/forks",
+    "container (none)",
+    "(none)",
+    "TODO",
+    "PLACEHOLDER",
+]
+INVALID_BADGE_VALUE = re.compile(r"(container\s+\((?:none|null|undefined)\)|\((?:none|null|undefined)\))", re.I)
+ENTERPRISE_README_TYPES = {
+    "ansible_collection",
+    "container_image",
+    "playbook_runbook",
+    "private_infrastructure",
+    "terraform_module",
+    "terraform_policy",
+    "helm_chart",
+    "documentation",
+    "packer_template",
+    "shared_assets",
+    "repository_profile",
+    "generic_managed",
+}
 
 
 def metadata() -> dict[str, str]:
@@ -60,11 +91,16 @@ def assert_file(path: Path) -> str:
 
 
 def managed_readme_block(readme: str) -> str:
-    start = readme.find(BEGIN)
-    end = readme.find(END)
+    start = readme.find(RELEASE_QUALITY_BEGIN)
+    end = readme.find(RELEASE_QUALITY_END)
+    end_marker = RELEASE_QUALITY_END
+    if start == -1 or end == -1 or end < start:
+        start = readme.find(BEGIN)
+        end = readme.find(END)
+        end_marker = END
     if start == -1 or end == -1 or end < start:
         raise AssertionError("README.md is missing the managed release-model block")
-    return readme[start : end + len(END)]
+    return readme[start : end + len(end_marker)]
 
 
 def quality_badge_block(readme: str) -> str:
@@ -75,6 +111,54 @@ def quality_badge_block(readme: str) -> str:
     return readme[start : end + len(QUALITY_END)]
 
 
+def readme_looks_collapsed(readme: str) -> bool:
+    lines = readme.splitlines()
+    if len(lines) < 10:
+        return True
+    return any(len(line) > 1000 and ("[![" in line or "## " in line or "|---|" in line) for line in lines)
+
+
+def readme_has_human_intro_before_matrix(readme: str) -> bool:
+    quality_end = readme.find(QUALITY_END)
+    compat_begin = readme.find(COMPAT_BEGIN)
+    if quality_end == -1 or compat_begin == -1 or compat_begin < quality_end:
+        return False
+    between = readme[quality_end + len(QUALITY_END):compat_begin]
+    between = re.sub(r"<!--.*?-->", "", between, flags=re.DOTALL)
+    between = re.sub(r"## Release and Quality Model.*", "", between, flags=re.DOTALL)
+    return len(between.strip()) >= 80
+
+
+def readme_section_order_ok(readme: str) -> bool:
+    first_heading = readme.find("\n## ")
+    quality_begin = readme.find(QUALITY_BEGIN)
+    quality_end = readme.find(QUALITY_END)
+    release_begin = readme.find(RELEASE_QUALITY_BEGIN)
+    compat_begin = readme.find(COMPAT_BEGIN)
+    evidence = readme.find("## Release Evidence")
+    if min(quality_begin, quality_end, release_begin, compat_begin, evidence) == -1:
+        return False
+    return quality_begin < quality_end and quality_begin < first_heading < release_begin < compat_begin < evidence
+
+
+def readme_has_exact_heading(readme: str, heading: str) -> bool:
+    return re.search(rf"^{re.escape(heading)}$", readme, re.MULTILINE) is not None
+
+
+def check_container_badge_mapping(meta: dict[str, str], readme: str) -> None:
+    if meta.get("repository_type") != "container_image":
+        return
+    quality_block = quality_badge_block(readme)
+    if "container_build" in quality_block:
+        raise AssertionError("README.md quality badge block leaked metadata key container_build")
+    if INVALID_BADGE_VALUE.search(quality_block):
+        raise AssertionError("README.md quality badge block contains invalid empty badge value")
+    if "Container Build" in quality_block and "container-build-publish.yml/badge.svg" in quality_block:
+        raise AssertionError("README.md uses release workflow as Container Build badge")
+    if "Container Build" in quality_block and "container-build.yml/badge.svg" not in quality_block:
+        raise AssertionError("README.md Container Build badge does not point to container-build.yml")
+
+
 def check_generated_docs(meta: dict[str, str]) -> None:
     readme = assert_file(ROOT / "README.md")
     release = assert_file(ROOT / "RELEASE.md")
@@ -82,17 +166,49 @@ def check_generated_docs(meta: dict[str, str]) -> None:
     openssf = assert_file(ROOT / "OPENSSF.md")
     assert_file(ROOT / ".lit" / "repository.yml")
 
-    if BEGIN not in readme or END not in readme:
+    if readme_looks_collapsed(readme):
+        raise AssertionError("README.md markdown appears collapsed or structurally invalid")
+    new_release_model = RELEASE_QUALITY_BEGIN in readme and RELEASE_QUALITY_END in readme
+    old_release_model = BEGIN in readme and END in readme
+    if not new_release_model and not old_release_model:
         raise AssertionError("README.md is missing the managed release-model block")
     if QUALITY_BEGIN not in readme or QUALITY_END not in readme:
         raise AssertionError("README.md is missing the managed quality badge block")
+    if meta.get("repository_type") in ENTERPRISE_README_TYPES:
+        if COMPAT_BEGIN not in readme or COMPAT_END not in readme:
+            raise AssertionError("README.md is missing the managed compatibility matrix block")
+        if not new_release_model:
+            raise AssertionError("README.md is missing the managed release quality model block")
+        if not readme_section_order_ok(readme):
+            raise AssertionError("README.md managed sections are not in enterprise order")
+        if not readme_has_human_intro_before_matrix(readme):
+            raise AssertionError("README.md lacks human project content before compatibility matrix")
+        if "## Release Evidence" not in readme:
+            raise AssertionError("README.md is missing the Release Evidence section")
+        for heading in ["## Security", "## Contributing"]:
+            if not readme_has_exact_heading(readme, heading):
+                raise AssertionError(f"README.md is missing the exact {heading} section")
+        if (ROOT / "LICENSE").exists() and not readme_has_exact_heading(readme, "## License"):
+            raise AssertionError("README.md is missing the exact ## License section")
     if "[RELEASE.md](./RELEASE.md)" not in readme:
         raise AssertionError("README.md does not link to RELEASE.md")
-    if "## Supported and Tested Platforms" not in readme:
+    if meta.get("repository_type") in ENTERPRISE_README_TYPES:
+        if "## Compatibility Matrix" not in readme:
+            raise AssertionError("README.md does not include the compatibility matrix")
+    elif "## Supported and Tested Platforms" not in readme and "## Compatibility Matrix" not in readme:
         raise AssertionError("README.md does not include the supported/tested platforms matrix")
-    for term in ["Production Ready", "Enterprise Ready", "Battle Tested", "100% Tested", "github/stars", "github/forks"]:
+    for term in DISALLOWED_GENERATED_TERMS:
         if term in readme:
             raise AssertionError(f"README.md contains disallowed badge term {term}")
+    if "quay.io/repository/" in readme and "/status" in readme:
+        raise AssertionError("README.md uses Quay status badge that can render container none")
+    if meta.get("repository_type") in {"container", "container_image", "container-image", "container-ee", "container_ee"}:
+        if "Container Version" not in readme:
+            raise AssertionError("README.md is missing the Container Version badge")
+        for term in ["container | none", "container (none)", "(none)", "undefined"]:
+            if term in readme:
+                raise AssertionError(f"README.md contains invalid container badge placeholder {term}")
+    check_container_badge_mapping(meta, readme)
     if meta.get("repository_type", "") not in release:
         raise AssertionError("RELEASE.md does not include the repository type")
     if "Release Evidence" not in release:
