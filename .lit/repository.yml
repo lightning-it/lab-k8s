@@ -1,0 +1,24 @@
+schema_version: 1
+managed_by: lightning-it/shared-assets
+repository: lab-k8s
+visibility: public
+repository_type: playbook_runbook
+release_type: none
+artifact_type: none
+test_profiles:
+- yaml-structure
+- kubernetes-manifest-validation
+- smoke
+os_matrix:
+- ubuntu-latest
+product_matrix:
+- kubernetes
+publishing_targets: []
+galaxy_publish: false
+quay_publish: false
+release_evidence: false
+heavy_incus_required: false
+readme_badges:
+- license
+workflows:
+  ci: repository-quality.yml
