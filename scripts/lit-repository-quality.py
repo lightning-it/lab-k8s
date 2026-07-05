@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path.cwd()
-GENERATED = [ROOT / "README.md", ROOT / "RELEASE.md", ROOT / "TESTING.md"]
+GENERATED = [ROOT / "README.md", ROOT / "RELEASE.md", ROOT / "TESTING.md", ROOT / "OPENSSF.md"]
 BEGIN = "<!-- BEGIN LIT_SHARED_RELEASE_MODEL -->"
 END = "<!-- END LIT_SHARED_RELEASE_MODEL -->"
 
@@ -69,6 +69,7 @@ def check_generated_docs(meta: dict[str, str]) -> None:
     readme = assert_file(ROOT / "README.md")
     release = assert_file(ROOT / "RELEASE.md")
     testing = assert_file(ROOT / "TESTING.md")
+    openssf = assert_file(ROOT / "OPENSSF.md")
     assert_file(ROOT / ".lit" / "repository.yml")
 
     if BEGIN not in readme or END not in readme:
@@ -81,12 +82,16 @@ def check_generated_docs(meta: dict[str, str]) -> None:
         raise AssertionError("RELEASE.md does not describe release evidence")
     if "Test Profiles" not in testing:
         raise AssertionError("TESTING.md does not describe test profiles")
+    for term in ["OpenSSF Readiness", "Scorecard", "Best Practices Badge", "Security Policy"]:
+        if term not in openssf:
+            raise AssertionError(f"OPENSSF.md does not include {term}")
 
     placeholder = re.compile(r"(TODO|TBD|PLACEHOLDER|FIXME)", re.IGNORECASE)
     generated_texts = [
         ("README.md managed block", managed_readme_block(readme)),
         ("RELEASE.md", release),
         ("TESTING.md", testing),
+        ("OPENSSF.md", openssf),
     ]
     for label, text in generated_texts:
         if placeholder.search(text):
@@ -108,6 +113,7 @@ def check_secret_safe_generated_docs() -> None:
         ("README.md managed block", managed_readme_block(readme)),
         ("RELEASE.md", assert_file(ROOT / "RELEASE.md")),
         ("TESTING.md", assert_file(ROOT / "TESTING.md")),
+        ("OPENSSF.md", assert_file(ROOT / "OPENSSF.md")),
         (".lit/repository.yml", assert_file(ROOT / ".lit" / "repository.yml")),
     ]
     for label, text in generated_texts:
