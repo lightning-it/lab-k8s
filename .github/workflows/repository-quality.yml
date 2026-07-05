@@ -28,8 +28,12 @@ jobs:
       - name: Run Lightning IT repository quality checks
         run: python3 scripts/lit-repository-quality.py
 
+      - name: Install GitHub policy audit dependencies
+        if: hashFiles('scripts/audit-github-release-model.py') != '' && (hashFiles('release-model/repositories.yml') != '' || hashFiles('shared-assets/release-model/repositories.yml') != '')
+        run: python3 -m pip install pyyaml
+
       - name: Build desired GitHub policy evidence
-        if: hashFiles('scripts/audit-github-release-model.py') != ''
+        if: hashFiles('scripts/audit-github-release-model.py') != '' && (hashFiles('release-model/repositories.yml') != '' || hashFiles('shared-assets/release-model/repositories.yml') != '')
         run: python3 scripts/audit-github-release-model.py --output dist/github-release-model-audit.json
 
       - name: Upload desired GitHub policy evidence
