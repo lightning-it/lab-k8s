@@ -11,9 +11,17 @@ from pathlib import Path
 
 
 ROOT = Path.cwd()
-GENERATED = [ROOT / "README.md", ROOT / "RELEASE.md", ROOT / "TESTING.md"]
+GENERATED = [ROOT / "README.md", ROOT / "RELEASE.md", ROOT / "TESTING.md", ROOT / "OPENSSF.md"]
 BEGIN = "<!-- BEGIN LIT_SHARED_RELEASE_MODEL -->"
 END = "<!-- END LIT_SHARED_RELEASE_MODEL -->"
+QUALITY_BEGIN = "<!-- BEGIN LIT_QUALITY_BADGES -->"
+QUALITY_END = "<!-- END LIT_QUALITY_BADGES -->"
+MANAGED_BY = "lightning-it/shared-assets-lit"
+LICENSE_HEADERS = {
+    "MIT": "MIT License",
+    "GPL-3.0-only": "GNU GENERAL PUBLIC LICENSE",
+    "GPL-3.0-or-later": "GNU GENERAL PUBLIC LICENSE",
+}
 
 
 def metadata() -> dict[str, str]:
@@ -65,35 +73,66 @@ def managed_readme_block(readme: str) -> str:
     return readme[start : end + len(END)]
 
 
+def quality_badge_block(readme: str) -> str:
+    start = readme.find(QUALITY_BEGIN)
+    end = readme.find(QUALITY_END)
+    if start == -1 or end == -1 or end < start:
+        raise AssertionError("README.md is missing the managed quality badge block")
+    return readme[start : end + len(QUALITY_END)]
+
+
 def check_generated_docs(meta: dict[str, str]) -> None:
     readme = assert_file(ROOT / "README.md")
     release = assert_file(ROOT / "RELEASE.md")
     testing = assert_file(ROOT / "TESTING.md")
+    openssf = assert_file(ROOT / "OPENSSF.md")
     assert_file(ROOT / ".lit" / "repository.yml")
+    license_spdx = meta.get("license_spdx", "MIT")
+
+    if meta.get("managed_by") != MANAGED_BY:
+        raise AssertionError(f".lit/repository.yml managed_by must be {MANAGED_BY}")
 
     if BEGIN not in readme or END not in readme:
         raise AssertionError("README.md is missing the managed release-model block")
+    if QUALITY_BEGIN not in readme or QUALITY_END not in readme:
+        raise AssertionError("README.md is missing the managed quality badge block")
     if "[RELEASE.md](./RELEASE.md)" not in readme:
         raise AssertionError("README.md does not link to RELEASE.md")
+    if "## Supported and Tested Platforms" not in readme:
+        raise AssertionError("README.md does not include the supported/tested platforms matrix")
+    for term in ["Production Ready", "Enterprise Ready", "Battle Tested", "100% Tested", "github/stars", "github/forks"]:
+        if term in readme:
+            raise AssertionError(f"README.md contains disallowed badge term {term}")
     if meta.get("repository_type", "") not in release:
         raise AssertionError("RELEASE.md does not include the repository type")
     if "Release Evidence" not in release:
         raise AssertionError("RELEASE.md does not describe release evidence")
     if "Test Profiles" not in testing:
         raise AssertionError("TESTING.md does not describe test profiles")
+    for term in ["OpenSSF Readiness", "Scorecard", "Best Practices Badge", "Security Policy"]:
+        if term not in openssf:
+            raise AssertionError(f"OPENSSF.md does not include {term}")
 
     placeholder = re.compile(r"(TODO|TBD|PLACEHOLDER|FIXME)", re.IGNORECASE)
     generated_texts = [
         ("README.md managed block", managed_readme_block(readme)),
+        ("README.md quality badge block", quality_badge_block(readme)),
         ("RELEASE.md", release),
         ("TESTING.md", testing),
+        ("OPENSSF.md", openssf),
     ]
     for label, text in generated_texts:
         if placeholder.search(text):
             raise AssertionError(f"{label} contains unresolved placeholder text")
 
+    if "License-MIT" in readme and license_spdx != "MIT":
+        raise AssertionError(f"README.md has MIT badge but license_spdx is {license_spdx}")
     if "License-MIT" in readme and not (ROOT / "LICENSE").exists():
         raise AssertionError("README.md has a license badge but no root LICENSE")
+    if (ROOT / "LICENSE").exists():
+        expected_header = LICENSE_HEADERS.get(license_spdx)
+        if expected_header and expected_header not in (ROOT / "LICENSE").read_text(encoding="utf-8")[:200]:
+            raise AssertionError(f"LICENSE content does not match {license_spdx}")
 
 
 def check_secret_safe_generated_docs() -> None:
@@ -108,6 +147,7 @@ def check_secret_safe_generated_docs() -> None:
         ("README.md managed block", managed_readme_block(readme)),
         ("RELEASE.md", assert_file(ROOT / "RELEASE.md")),
         ("TESTING.md", assert_file(ROOT / "TESTING.md")),
+        ("OPENSSF.md", assert_file(ROOT / "OPENSSF.md")),
         (".lit/repository.yml", assert_file(ROOT / ".lit" / "repository.yml")),
     ]
     for label, text in generated_texts:
