@@ -20,6 +20,11 @@ galaxy_publish: false
 quay_publish: false
 release_evidence: false
 heavy_incus_required: false
+openssf_best_practices:
+  required: true
+  project_id: null
+  target_level: passing
+  exception: null
 readme_badges:
   - license
 workflows:
