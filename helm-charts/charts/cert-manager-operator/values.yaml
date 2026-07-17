@@ -2,7 +2,7 @@
 # Using sub-chart helper-operator
 helper-operator:
   operators:
-     cert-manager:
+    cert-manager:
       enabled: true
       syncwave: '0'
       namespace:

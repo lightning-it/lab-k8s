@@ -80,8 +80,8 @@ rook-ceph-cluster:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
-            - matchExpressions:
-              - key: cluster.ocs.openshift.io/openshift-storage
-                operator: In
-                values:
-                - ""
+              - matchExpressions:
+                  - key: cluster.ocs.openshift.io/openshift-storage
+                    operator: In
+                    values:
+                      - ""
