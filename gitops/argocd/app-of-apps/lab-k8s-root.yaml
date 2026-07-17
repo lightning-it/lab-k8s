@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: lab-k8s
+  namespace: argocd
+spec:
+  project: lab-k8s
+  source:
+    repoURL: <YOUR_REPO_URL>
+    targetRevision: main
+    path: gitops/argocd/applications
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

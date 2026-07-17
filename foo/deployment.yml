@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: okms-smoke
+  namespace: lit-okms
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: okms-smoke
+  template:
+    metadata:
+      labels:
+        app: okms-smoke
+    spec:
+      containers:
+        - name: smoke
+          image: alpine:3.20
+          command: ["sh", "-lc"]
+          env:
+            - name: OKMS_REST
+              value: "https://eu-west-lim.okms.ovh.net"
+            - name: SECRET_UPN
+              value: "urn:v1:eu:resource:okms:61bb24dc-4f5e-40de-a939-a1fdd1aa8f3f/secret/poc%2Fvpn"
+            - name: SECRET_KV_KEY
+              value: "shared-key"
+            - name: CERT_PATH
+              value: "/etc/okms/tls/tls.crt"
+            - name: KEY_PATH
+              value: "/etc/okms/tls/tls.key"
+          volumeMounts:
+            - name: okms-tls
+              mountPath: /etc/okms/tls
+              readOnly: true
+            - name: okms-script
+              mountPath: /opt/kms
+              readOnly: true
+          args:
+            - |
+              set -e
+              echo "[okms-smoke] installing curl+jq+bash+openssl..."
+              apk add --no-cache curl jq bash openssl ca-certificates >/dev/null
+
+              while true; do
+                echo "[okms-smoke] $(date -Iseconds) fetching secret..."
+                bash /opt/kms/kms-get-secret.sh | sed 's/^/[SECRET] /'
+                sleep 60
+              done
+      volumes:
+        - name: okms-tls
+          secret:
+            secretName: okms-client
+        - name: okms-script
+          configMap:
+            name: okms-kms-script
+            defaultMode: 0755

@@ -1,0 +1,46 @@
+# yamllint disable rule:truthy
+---
+name: Repository Quality
+
+on:
+  push:
+    branches: ["develop", "main"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: repository / quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Run Lightning IT repository quality checks
+        run: python3 scripts/lit-repository-quality.py
+
+      - name: Install GitHub policy audit dependencies
+        if: hashFiles('scripts/audit-github-release-model.py') != '' && (hashFiles('release-model/repositories.yml') != '' || hashFiles('shared-assets/release-model/repositories.yml') != '')
+        run: python3 -m pip install pyyaml
+
+      - name: Build desired GitHub policy evidence
+        if: hashFiles('scripts/audit-github-release-model.py') != '' && (hashFiles('release-model/repositories.yml') != '' || hashFiles('shared-assets/release-model/repositories.yml') != '')
+        run: python3 scripts/audit-github-release-model.py --output dist/github-release-model-audit.json
+
+      - name: Upload desired GitHub policy evidence
+        if: hashFiles('dist/github-release-model-audit.json') != ''
+        uses: actions/upload-artifact@v5
+        with:
+          name: github-release-model-audit
+          path: |
+            dist/github-release-model-audit.json
+            dist/github-release-model-audit.md

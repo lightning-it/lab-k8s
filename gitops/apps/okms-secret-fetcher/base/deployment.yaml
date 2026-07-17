@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: okms-secret-fetcher-demo
+  namespace: okms
+  labels:
+    app: okms-secret-fetcher-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: okms-secret-fetcher-demo
+  template:
+    metadata:
+      labels:
+        app: okms-secret-fetcher-demo
+    spec:
+      volumes:
+        - name: okms-tls
+          secret:
+            secretName: okms-client
+        - name: secret-out
+          emptyDir: {}
+      initContainers:
+        - name: fetch-okms-secret
+          image: <YOUR_REGISTRY>/okms-secret-fetcher:dev
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: okms-secret-fetcher-config
+          args: ["--cert", "/etc/okms/tls/tls.crt", "--key", "/etc/okms/tls/tls.key"]
+          volumeMounts:
+            - name: okms-tls
+              mountPath: /etc/okms/tls
+              readOnly: true
+            - name: secret-out
+              mountPath: /work
+      containers:
+        - name: app
+          image: alpine:3.20
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-lc"]
+          args:
+            - |
+              echo "Secret file is at /work/shared-key.txt";
+              ls -l /work;
+              echo "Value (demo): $(cat /work/shared-key.txt)";
+              sleep 3600
+          volumeMounts:
+            - name: secret-out
+              mountPath: /work
