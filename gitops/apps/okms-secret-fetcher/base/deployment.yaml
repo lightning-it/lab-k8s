@@ -39,7 +39,7 @@ spec:
         - name: app
           image: alpine:3.20
           imagePullPolicy: IfNotPresent
-          command: ["/bin/sh","-lc"]
+          command: ["/bin/sh", "-lc"]
           args:
             - |
               echo "Secret file is at /work/shared-key.txt";
