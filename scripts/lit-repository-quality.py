@@ -22,6 +22,13 @@ LICENSE_HEADERS = {
     "GPL-3.0-only": "GNU GENERAL PUBLIC LICENSE",
     "GPL-3.0-or-later": "GNU GENERAL PUBLIC LICENSE",
 }
+INVALID_BADGE_VALUES = re.compile(r"(container\s+\(?none\)?|\((?:none|null|undefined)\)|\bundefined\b|\bnull\b)", re.I)
+QUAY_STATUS_URL = re.compile(
+    r"https?://quay\.io/repository/"
+    r"[^/\s)\]}>\"'<]+/[^/\s)\]}>\"'<]+/status"
+    r"(?:[/?#][^\s)\]}>\"'<]*)?",
+    re.IGNORECASE,
+)
 
 
 def metadata() -> dict[str, str]:
@@ -81,11 +88,19 @@ def quality_badge_block(readme: str) -> str:
     return readme[start : end + len(QUALITY_END)]
 
 
+def check_quality_badge_block(badge_block: str) -> None:
+    if QUAY_STATUS_URL.search(badge_block):
+        raise AssertionError("README.md uses Quay status badge endpoint")
+    if INVALID_BADGE_VALUES.search(badge_block):
+        raise AssertionError("README.md quality badge block contains invalid placeholder value")
+
+
 def check_generated_docs(meta: dict[str, str]) -> None:
     readme = assert_file(ROOT / "README.md")
     release = assert_file(ROOT / "RELEASE.md")
     testing = assert_file(ROOT / "TESTING.md")
     openssf = assert_file(ROOT / "OPENSSF.md")
+    badge_block = quality_badge_block(readme)
     assert_file(ROOT / ".lit" / "repository.yml")
     license_spdx = meta.get("license_spdx", "MIT")
 
@@ -116,7 +131,7 @@ def check_generated_docs(meta: dict[str, str]) -> None:
     placeholder = re.compile(r"(TODO|TBD|PLACEHOLDER|FIXME)", re.IGNORECASE)
     generated_texts = [
         ("README.md managed block", managed_readme_block(readme)),
-        ("README.md quality badge block", quality_badge_block(readme)),
+        ("README.md quality badge block", badge_block),
         ("RELEASE.md", release),
         ("TESTING.md", testing),
         ("OPENSSF.md", openssf),
@@ -124,6 +139,7 @@ def check_generated_docs(meta: dict[str, str]) -> None:
     for label, text in generated_texts:
         if placeholder.search(text):
             raise AssertionError(f"{label} contains unresolved placeholder text")
+    check_quality_badge_block(badge_block)
 
     if "License-MIT" in readme and license_spdx != "MIT":
         raise AssertionError(f"README.md has MIT badge but license_spdx is {license_spdx}")
