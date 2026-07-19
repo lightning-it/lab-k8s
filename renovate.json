@@ -1,0 +1,47 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":semanticCommitType(chore)",
+    ":semanticCommitScope(deps)"
+  ],
+  "renovate-config": {
+    "enabled": false
+  },
+  "labels": ["dependencies", "renovate"],
+  "baseBranchPatterns": ["develop"],
+  "timezone": "UTC",
+  "schedule": [],
+  "rebaseWhen": "behind-base-branch",
+  "prConcurrentLimit": 5,
+  "packageRules": [
+    {
+      "description": "Automerge safe non-major updates into develop after CI passes",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest",
+        "pinDigest",
+        "lockFileMaintenance"
+      ],
+      "addLabels": ["safe-automerge"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Require manual approval for major updates",
+      "matchUpdateTypes": ["major"],
+      "addLabels": ["breaking-update"],
+      "automerge": false,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Keep every component of the GitHub Actions toolchain on one version",
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions"
+    }
+  ]
+}
