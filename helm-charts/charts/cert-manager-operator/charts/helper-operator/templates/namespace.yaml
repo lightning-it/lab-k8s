@@ -13,10 +13,10 @@ metadata:
   {{- if or ($value.namespace.descr) ($value.namespace.displayname) }}
   annotations:
     {{- if $value.namespace.descr }}
-    openshift.io/description: {{ $value.namespace.descr }}
+    openshift.io/description: {{ $value.namespace.descr | quote }}
     {{- end }}
     {{- if $value.namespace.displayname }}
-    openshift.io/display-name: {{ $value.namespace.displayname }}
+    openshift.io/display-name: {{ $value.namespace.displayname | quote }}
     {{- end }}
   {{- end }}
 {{- end }}
