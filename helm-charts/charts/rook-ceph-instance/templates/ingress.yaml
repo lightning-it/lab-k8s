@@ -13,13 +13,13 @@ spec:
     - host: rook-ceph.{{ include "global.appsDomain" . }}
       http:
         paths:
-        - path: /
-          pathType: Prefix
-          backend:
-            service:
-              name: rook-ceph-mgr-dashboard
-              port:
-                name: https-dashboard
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rook-ceph-mgr-dashboard
+                port:
+                  name: https-dashboard
   tls:
     - hosts:
-      - rook-ceph.{{ include "global.appsDomain" . }}
+        - rook-ceph.{{ include "global.appsDomain" . }}

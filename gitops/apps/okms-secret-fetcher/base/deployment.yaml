@@ -15,6 +15,8 @@ spec:
       labels:
         app: okms-secret-fetcher-demo
     spec:
+      securityContext:
+        fsGroup: 10001
       volumes:
         - name: okms-tls
           secret:
@@ -44,7 +46,8 @@ spec:
             - |
               echo "Secret file is at /work/shared-key.txt";
               ls -l /work;
-              echo "Value (demo): $(cat /work/shared-key.txt)";
+              test -s /work/shared-key.txt;
+              echo "Secret file is present and non-empty.";
               sleep 3600
           volumeMounts:
             - name: secret-out

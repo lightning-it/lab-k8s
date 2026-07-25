@@ -9,6 +9,7 @@ metadata:
   namespace: {{ .namespace.name | quote }}
   annotations:
     argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
     argocd.argoproj.io/sync-wave: {{ .syncwave | default 0 | quote }}
   labels:
     {{- include "tpl.labels" $ | nindent 4 }}
@@ -16,7 +17,7 @@ spec:
   template:
     spec:
       containers:
-        - image: quay.io/openshift/origin-cli:latest
+        - image: quay.io/openshift/origin-cli@sha256:418a77de8c4ff1f9e26ec3aaf7bb85a7c71ad5f7e7449f6373bbc738fb012dfa
           command:
             - /bin/bash
             - -c
