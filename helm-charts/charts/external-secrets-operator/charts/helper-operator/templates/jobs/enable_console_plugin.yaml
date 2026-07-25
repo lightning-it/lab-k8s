@@ -4,7 +4,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: enable-console-plugin-{{ randAlphaNum 5 | lower }}
+  name: enable-console-plugin
   namespace: {{ .Values.console_plugins.job_namespace | default "openshift-gitops" }}
   annotations:
     argocd.argoproj.io/hook: Sync
