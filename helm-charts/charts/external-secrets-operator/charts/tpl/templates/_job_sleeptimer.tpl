@@ -1,6 +1,6 @@
 {{/*
 Create a sleeptimer for Jobs.
-This has no input parameters. It just prints our the below while loop.
+This has no input parameters. It just prints out the below while loop.
      
 {{ include "tpl.sleeptimer" . -}}
 */}}

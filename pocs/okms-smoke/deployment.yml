@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: okms-smoke
-  namespace: lit-okms
+  namespace: okms
 spec:
   replicas: 1
   selector:

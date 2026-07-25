@@ -3,7 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: okms-kms-script
-  namespace: lit-okms
+  namespace: okms
 data:
   kms-get-secret.sh: |
     #!/usr/bin/env bash
