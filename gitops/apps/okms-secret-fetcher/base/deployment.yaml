@@ -44,6 +44,7 @@ spec:
           command: ["/bin/sh", "-lc"]
           args:
             - |
+              set -e
               echo "Secret file is at /work/shared-key.txt";
               ls -l /work;
               test -s /work/shared-key.txt;

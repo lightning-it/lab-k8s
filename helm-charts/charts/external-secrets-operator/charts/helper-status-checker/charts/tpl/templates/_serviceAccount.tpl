@@ -5,9 +5,9 @@ that templating works and does not break at some point
 */}}
 {{- define "tpl.serviceAccountName" -}}
   {{- if .Values.serviceAccount.create }}
-    {{- default .Values.serviceAccount.name }}
+    {{- default "temp-serviceaccount" .Values.serviceAccount.name }}
   {{- else }}
-    {{- default "temp-serviceaccount" }}
+    {{- "temp-serviceaccount" }}
   {{- end }}
 {{- end }}
 
@@ -19,8 +19,8 @@ that templating works and does not break at some point
 */}}
 {{- define "tpl.serviceAccount" -}}
   {{- if .create }}
-    {{- default .name }}
+    {{- default "temp-serviceaccount" .name }}
   {{- else }}
-    {{- default "temp-serviceaccount" }}
+    {{- "temp-serviceaccount" }}
   {{- end }}
 {{- end }}

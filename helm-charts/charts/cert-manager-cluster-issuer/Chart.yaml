@@ -3,4 +3,4 @@ name: cert-manager-cluster-issuer
 description: Master chart to deploy and configure cert-manager cluster issuer
 version: 1.0.0
 home: >-
-  https://github.com/lightning-it/lab-k8s/tree/ovh/charts/cert-manager-cluster-issuer
+  https://github.com/lightning-it/lab-k8s/tree/develop/helm-charts/charts/cert-manager-cluster-issuer

@@ -3,7 +3,7 @@ name: rook-ceph-operator
 description: Master chart to deploy and configure ROOK Ceph Operator
 version: 1.0.1
 home: >-
-  https://github.com/lightning-it/lab-k8s/tree/ovh/charts/rook-ceph-operator
+  https://github.com/lightning-it/lab-k8s/tree/develop/helm-charts/charts/rook-ceph-operator
 dependencies:
   - name: rook-ceph
     repository: https://charts.rook.io/release

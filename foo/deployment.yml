@@ -43,7 +43,8 @@ spec:
 
               while true; do
                 echo "[okms-smoke] $(date -Iseconds) fetching secret..."
-                bash /opt/kms/kms-get-secret.sh | sed 's/^/[SECRET] /'
+                bash /opt/kms/kms-get-secret.sh >/dev/null
+                echo "[okms-smoke] secret fetch succeeded"
                 sleep 60
               done
       volumes:
