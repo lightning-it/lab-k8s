@@ -8,7 +8,9 @@ spec:
   sourceRepos:
     - "<YOUR_REPO_URL>"
   destinations:
-    - namespace: "*"
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+    - namespace: okms
       server: https://kubernetes.default.svc
   clusterResourceWhitelist:
     - group: ""

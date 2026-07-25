@@ -48,6 +48,8 @@ issuer:
     server: https://acme-v02.api.letsencrypt.org/directory
     email: admin@example.com
     cloudflare:
+      # Namespace where cert-manager reads ClusterIssuer credential Secrets.
+      secretNamespace: cert-manager
       # used if css.enabled: false
       token: pleaseoverwrite
 

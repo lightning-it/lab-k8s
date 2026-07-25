@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: smoke
-          image: alpine:3.20
+          image: <YOUR_REGISTRY>/okms-secret-fetcher:dev
           command: ["sh", "-lc"]
           env:
             - name: OKMS_REST
@@ -38,9 +38,6 @@ spec:
           args:
             - |
               set -e
-              echo "[okms-smoke] installing curl+jq+bash+openssl..."
-              apk add --no-cache curl jq bash openssl ca-certificates >/dev/null
-
               while true; do
                 echo "[okms-smoke] $(date -Iseconds) fetching secret..."
                 bash /opt/kms/kms-get-secret.sh \
