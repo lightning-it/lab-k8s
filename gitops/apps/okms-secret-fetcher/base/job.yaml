@@ -7,11 +7,15 @@ spec:
   backoffLimit: 0
   template:
     spec:
+      securityContext:
+        fsGroup: 10001
       restartPolicy: Never
       volumes:
         - name: okms-tls
           secret:
             secretName: okms-client
+        - name: secret-out
+          emptyDir: {}
       containers:
         - name: fetch
           image: <YOUR_REGISTRY>/okms-secret-fetcher:dev
@@ -24,3 +28,5 @@ spec:
             - name: okms-tls
               mountPath: /etc/okms/tls
               readOnly: true
+            - name: secret-out
+              mountPath: /work
