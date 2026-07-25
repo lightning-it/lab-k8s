@@ -21,7 +21,7 @@ spec:
             - name: OKMS_REST
               value: "https://eu-west-lim.okms.ovh.net"
             - name: SECRET_UPN
-              value: "urn:v1:eu:resource:okms:61bb24dc-4f5e-40de-a939-a1fdd1aa8f3f/secret/poc%2Fvpn"
+              value: "<SET_PER_ENVIRONMENT>"
             - name: SECRET_KV_KEY
               value: "shared-key"
             - name: CERT_PATH

@@ -95,7 +95,7 @@ for u in "${candidates[@]}"; do
   fi
 done
 
-[[ -n "$found_url" ]] || die "Secret fetch failed on all endpoints. Last HTTP=$code, last body: ${body:-<empty>}"
+[[ -n "$found_url" ]] || die "Secret fetch failed on all endpoints. Last HTTP=$code"
 
 # Extract value (try common shapes)
 # KV2: .data.data["key"]
