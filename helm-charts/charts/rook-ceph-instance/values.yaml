@@ -4,6 +4,9 @@ global:
   envName: kub01
   ingressSuffix: apps
 
+dashboardIngress:
+  tlsSecretName: rook-ceph-dashboard-tls
+
 rook-ceph-cluster:
   # -- Namespace of the main rook operator
   operatorNamespace: rook-ceph
