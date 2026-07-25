@@ -80,7 +80,7 @@ namespace:
 #      {{- include "tpl.matchLabels" .subject.namespaces.matchLabels | indent 4 }}
 #      {{- end }}
 #    {{- end }}
-namespaceSelector:          
+namespaceSelector:
   matchLabels:
     kubernetes.io/metadata.name: "openshift-dns"
 
@@ -102,14 +102,14 @@ namespaceSelector:
 #      {{- include "tpl.matchLabels" .subject.namespaces.matchLabels | indent 4 }}
 #      {{- end }}
 #    {{- end }}
-matchExpressions:    
+matchExpressions:
   - key: kubernetes.io/metadata.name
     operator: NotIn
     values:
       - "kube-system"
       - "openshift*"
       - "default"
-      - "kubde-info"
+      - "kube-info"
 
 
 # -- Security context configuration for containers
@@ -202,7 +202,7 @@ argocd_applications:
     # -- Basic application metadata
     # @default: "openshift-gitops"
     namespace: "openshift-gitops"
-    
+
     # -- Add labels to your application object.
     # @default: {}
     labels: {}
@@ -210,7 +210,7 @@ argocd_applications:
     #  app.kubernetes.io/part-of: my-project
 
     # -- Add annotations to your application object.
-    # @default: {}      
+    # @default: {}
     annotations: {}
     #  argocd.argoproj.io/sync-wave: "1"
     #  notifications.argoproj.io/subscribe.on-sync-succeeded.slack: my-channel
@@ -222,7 +222,7 @@ argocd_applications:
       # - resources-finalizer.argocd.argoproj.io
       # --Alternatively, you can use background cascading deletion
       # - resources-finalizer.argocd.argoproj.io/background
-    
+
     #  -- Argo CD Project the application belongs to
     # @default: "default"
     project: default
@@ -257,7 +257,7 @@ argocd_applications:
         # -- Release name override (defaults to application name)
         # @default: ""
         releaseName: "my-release"
-  
+
         # -- Value files to use for the Helm release
         # @default: []
         valueFiles:
@@ -357,7 +357,7 @@ argocd_applications:
       server: "https://kubernetes.default.svc"
 
       # -- name of the cluster to sync to
-      # @default: "" 
+      # @default: ""
       # name: "in-cluster"
 
       # -- The namespace will only be set for namespace-scoped resources that have not set a value for .metadata.namespace
@@ -375,7 +375,7 @@ argocd_applications:
         # @default: false
         prune: false
 
-        # -- Specifies if partial app sync should be executed when resources are changed only in 
+        # -- Specifies if partial app sync should be executed when resources are changed only in
         # target Kubernetes cluster and no git change detected ( false by default ).
         # @default: false
         selfHeal: false

@@ -2,15 +2,15 @@
 Return matchExpressions definition that can be used for example in AdminNetworkPolicy object.
 
 Example for an expression that would match namespaces when they are not kube-system, openshift*, default, kube-info etc.
-      matchExpressions:    
+      matchExpressions:
         - key: kubernetes.io/metadata.name
           operator: NotIn
           values:
             - "kube-system"
             - "openshift*"
             - "default"
-            - "kubde-info"  
-     
+            - "kube-info"
+
 {{ include "tpl.matchExpressions" . -}}
 */}}
 

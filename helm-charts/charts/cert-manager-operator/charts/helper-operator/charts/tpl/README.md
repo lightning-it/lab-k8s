@@ -9,7 +9,7 @@
 
   ![Version: 1.0.20](https://img.shields.io/badge/Version-1.0.20-informational?style=flat-square)
 
- 
+
 
   ## Description
 
@@ -58,7 +58,7 @@ Source code: https://github.com/tjungbauer/helm-charts/tree/main/charts/tpl
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| matchExpressions | list | `[{"key":"kubernetes.io/metadata.name","operator":"NotIn","values":["kube-system","openshift*","default","kubde-info"]}]` | Deine a metchExpression to use key, oeprator, value pairs. <br /> Example include (used in chart admin-networkpolicies)  spec:  subject:    {{- if .subject.namespaces }}    namespaces:      {{- if .subject.namespaces.matchExpressions }}      matchExpressions:        {{- range .subject.namespaces.matchExpressions }}        {{- include "tpl.matchExpressions" . | indent 4 }}        {{- end }}      {{- end }}      {{- if .subject.namespaces.matchLabels }}      {{- include "tpl.matchLabels" .subject.namespaces.matchLabels | indent 4 }}      {{- end }}    {{- end }} |
+| matchExpressions | list | `[{"key":"kubernetes.io/metadata.name","operator":"NotIn","values":["kube-system","openshift*","default","kube-info"]}]` | Deine a metchExpression to use key, oeprator, value pairs. <br /> Example include (used in chart admin-networkpolicies)  spec:  subject:    {{- if .subject.namespaces }}    namespaces:      {{- if .subject.namespaces.matchExpressions }}      matchExpressions:        {{- range .subject.namespaces.matchExpressions }}        {{- include "tpl.matchExpressions" . | indent 4 }}        {{- end }}      {{- end }}      {{- if .subject.namespaces.matchLabels }}      {{- include "tpl.matchLabels" .subject.namespaces.matchLabels | indent 4 }}      {{- end }}    {{- end }} |
 | namespace | object | `{"additionalAnnotations":{"additionalAnnotation1":"My Annotation","additionalAnnotation2":"My Annotation 2"},"additionalLabels":{"myLabel1":"My Label","myLabel2":"My Labe 2"},"bindtoNode":{"role":"infra"}}` | If you want to annotate a namespace to run on a specific node configure the following annotations <br /> Example include:    {{- if .Values.namespace.bindtoNode }}    {{- if .Values.namespace.bindtoNode.role }}    {{- include "tpl.bindtoNode" .Values.namespace.bindtoNode | nindent 4 }}    {{- end }}    {{- end }}    {{- include "tpl.additionalAnnotations" .Values.namespace.additionalAnnotations | indent 4 }}    {{- include "tpl.additionalLabels" .Values.namespace.additionalLabels | indent 4 }} |
 | namespaceSelector | object | `{"matchLabels":{"kubernetes.io/metadata.name":"openshift-dns"}}` | Define a NamespaceSelector and the required labels <br /> Example include (used in chart admin-networkpolicies)  spec:  subject:    {{- if .subject.namespaces }}    namespaces:      {{- if .subject.namespaces.matchExpressions }}      matchExpressions:        {{- range .subject.namespaces.matchExpressions }}        {{- include "tpl.matchExpressions" . | indent 4 }}        {{- end }}      {{- end }}      {{- if .subject.namespaces.matchLabels }}      {{- include "tpl.matchLabels" .subject.namespaces.matchLabels | indent 4 }}      {{- end }}    {{- end }} |
 | nodeSelector.key | string | `"node-role.kubernetes.io/infra"` |  |
@@ -111,18 +111,18 @@ namespace:
     myLabel1: "My Label"
     myLabel2: "My Labe 2"
 
-namespaceSelector:         
+namespaceSelector:
   matchLabels:
     kubernetes.io/metadata.name: "openshift-dns"
 
-matchExpressions:   
+matchExpressions:
   - key: kubernetes.io/metadata.name
     operator: NotIn
     values:
       - "kube-system"
       - "openshift*"
       - "default"
-      - "kubde-info" 
+      - "kube-info"
 
 ```
 
