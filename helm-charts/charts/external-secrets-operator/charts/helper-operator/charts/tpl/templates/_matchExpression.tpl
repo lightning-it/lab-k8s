@@ -9,7 +9,7 @@ Example for an expression that would match namespaces when they are not kube-sys
             - "kube-system"
             - "openshift*"
             - "default"
-            - "kubde-info"  
+            - "kube-info"
      
 {{ include "tpl.matchExpressions" . -}}
 */}}

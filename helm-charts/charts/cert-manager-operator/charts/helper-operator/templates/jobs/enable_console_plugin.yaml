@@ -29,7 +29,7 @@ spec:
               # Patch console.operator
               # Be sure to keep the "/-" at the end of the path
 
-              new_values=({{ join " " .Values.console_plugins.plugins }})
+              new_values=({{ range .Values.console_plugins.plugins }}{{ . | squote }} {{ end }})
 
               for value in "${new_values[@]}"; do
 

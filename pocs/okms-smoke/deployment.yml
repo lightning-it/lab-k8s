@@ -43,7 +43,9 @@ spec:
 
               while true; do
                 echo "[okms-smoke] $(date -Iseconds) fetching secret..."
-                bash /opt/kms/kms-get-secret.sh >/dev/null
+                bash /opt/kms/kms-get-secret.sh \
+                  --cert "$CERT_PATH" \
+                  --key "$KEY_PATH" >/dev/null
                 echo "[okms-smoke] secret fetch succeeded"
                 sleep 60
               done
