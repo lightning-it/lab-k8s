@@ -42,6 +42,8 @@ spec:
             - name: okms-tls
               mountPath: /etc/okms/tls
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
           args:
             - |
               set -e
@@ -59,3 +61,5 @@ spec:
         - name: okms-tls
           secret:
             secretName: okms-client
+        - name: tmp
+          emptyDir: {}
