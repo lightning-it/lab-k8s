@@ -275,11 +275,11 @@ data:
 
       if [[ -z "$FOUND_URL" ]]; then
         rm -f "$TMP"
-        die "Secret fetch failed (no 200). Last HTTP=$CURL_HTTP_CODE, last body: $BODY
+        die "Secret fetch failed (no 200). Last HTTP=$CURL_HTTP_CODE.
 
     Most common causes:
-    - IAM policy missing the secret data permission (e.g. okms:apikms:secret/version/getData).  [oai_citation:2‡OVHcloud Blog](https://blog.ovhcloud.com/manage-your-secrets-through-ovhcloud-secret-manager-thanks-to-external-secrets-operator-eso-on-ovhcloud-managed-kubernetes-service-mks/?utm_source=chatgpt.com)
-    - Secret path mismatch (double-check the URN path encoding).  [oai_citation:3‡OVHcloud Help](https://help.ovhcloud.com/csm/en-secret-manager-ui?id=kb_article_view&sysparm_article=KB0072827)"
+    - IAM policy missing the secret data permission (for example, okms:apikms:secret/version/getData).
+    - Secret path mismatch (double-check the URN path encoding)."
       fi
 
       echo ""
@@ -287,7 +287,7 @@ data:
 
       # Try common shapes:
       # - KV2:   .data.data["shared-key"]
-      # - REST:  .version.data["shared-key"]  (as shown in REST doc examples)  [oai_citation:4‡OVHcloud Help](https://help.ovhcloud.com/csm/en-secret-manager-rest-api?id=kb_article_view&sysparm_article=KB0072856)
+      # - REST:  .version.data["shared-key"]
       VAL="$(printf "%s" "$BODY" | jq -r --arg k "$SECRET_KV_KEY" '
           (.data.data[$k] // .version.data[$k] // empty)
         ')"
@@ -295,8 +295,7 @@ data:
       if [[ -n "$VAL" && "$VAL" != "null" ]]; then
         echo "$VAL"
       else
-        warn "Could not locate key '$SECRET_KV_KEY' in expected JSON fields (.data.data or .version.data). Printing full response:"
-        echo "$BODY"
+        die "Could not locate key '$SECRET_KV_KEY' in expected JSON fields (.data.data or .version.data)."
       fi
 
       rm -f "$TMP"

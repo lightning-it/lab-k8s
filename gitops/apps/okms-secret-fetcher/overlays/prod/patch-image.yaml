@@ -8,4 +8,4 @@ spec:
     spec:
       initContainers:
         - name: fetch-okms-secret
-          image: <YOUR_REGISTRY>/okms-secret-fetcher:prod
+          image: example.invalid/okms-secret-fetcher:prod

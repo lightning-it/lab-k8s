@@ -25,7 +25,7 @@ spec:
           emptyDir: {}
       initContainers:
         - name: fetch-okms-secret
-          image: <YOUR_REGISTRY>/okms-secret-fetcher:dev
+          image: example.invalid/okms-secret-fetcher:dev
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:

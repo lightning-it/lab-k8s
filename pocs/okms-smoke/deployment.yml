@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: smoke
-          image: <YOUR_REGISTRY>/okms-secret-fetcher:dev
+          image: example.invalid/okms-secret-fetcher:dev
           command: ["sh", "-lc"]
           env:
             - name: OKMS_REST
