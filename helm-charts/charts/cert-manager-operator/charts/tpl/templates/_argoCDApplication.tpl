@@ -22,11 +22,11 @@ metadata:
   namespace: {{ $spec.namespace | default "openshift-gitops" }}
   {{- with $spec.labels }}
   labels:
-    {{- include "tpl.additionalLabels" . | indent 4 }}
+    {{- include "tpl.additionalLabels" . | nindent 4 }}
   {{- end }}
   {{- with $spec.annotations }}
   annotations:
-    {{- include "tpl.additionalAnnotations" . | indent 4 }}
+    {{- include "tpl.additionalAnnotations" . | nindent 4 }}
   {{- end }}
   {{- if $spec.finalizers }}
   finalizers:
