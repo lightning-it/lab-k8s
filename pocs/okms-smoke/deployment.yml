@@ -30,21 +30,22 @@ spec:
               value: "/etc/okms/tls/tls.crt"
             - name: KEY_PATH
               value: "/etc/okms/tls/tls.key"
+            - name: SECRET_OUT_FILE
+              value: "/tmp/okms-secret-value"
           volumeMounts:
             - name: okms-tls
               mountPath: /etc/okms/tls
-              readOnly: true
-            - name: okms-script
-              mountPath: /opt/kms
               readOnly: true
           args:
             - |
               set -e
               while true; do
                 echo "[okms-smoke] $(date -u '+%Y-%m-%dT%H:%M:%SZ') fetching secret..."
-                bash /opt/kms/kms-get-secret.sh \
+                /usr/local/bin/kms-get-secret.sh \
                   --cert "$CERT_PATH" \
-                  --key "$KEY_PATH" >/dev/null
+                  --key "$KEY_PATH"
+                test -s "$SECRET_OUT_FILE"
+                rm -f "$SECRET_OUT_FILE"
                 echo "[okms-smoke] secret fetch succeeded"
                 sleep 60
               done
@@ -52,7 +53,3 @@ spec:
         - name: okms-tls
           secret:
             secretName: okms-client
-        - name: okms-script
-          configMap:
-            name: okms-kms-script
-            defaultMode: 0755
