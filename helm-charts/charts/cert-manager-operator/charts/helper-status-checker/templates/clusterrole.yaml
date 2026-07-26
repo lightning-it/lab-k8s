@@ -22,6 +22,11 @@ rules:
     verbs:
       - get
       - list
+  - apiGroups:
+      - operators.coreos.com
+    resources:
+      - installplans
+    verbs:
       - patch
 {{- end }}
 {{- end }}

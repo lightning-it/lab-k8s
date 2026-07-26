@@ -20,14 +20,14 @@ data:
 
     OKMS_REST="${OKMS_REST:-https://eu-west-lim.okms.ovh.net}"
     OKMS_KMIP="${OKMS_KMIP:-eu-west-lim.okms.ovh.net:5696}"
-    OKMS_ID="${OKMS_ID:-61bb24dc-4f5e-40de-a939-a1fdd1aa8f3f}"
+    OKMS_ID="${OKMS_ID:-}"
 
-    ACCESS_CERT_ID="${ACCESS_CERT_ID:-261ba510-c485-4fb9-ab71-12548ec4b969}"
-    ACCESS_CERT_NAME="${ACCESS_CERT_NAME:-access-poc01}"
+    ACCESS_CERT_ID="${ACCESS_CERT_ID:-}"
+    ACCESS_CERT_NAME="${ACCESS_CERT_NAME:-}"
 
-    KEY_ID="${KEY_ID:-5a23a6c2-00b6-4cde-931e-c2db55a0fd7b}"
+    KEY_ID="${KEY_ID:-}"
 
-    SECRET_UPN="${SECRET_UPN:-urn:v1:eu:resource:okms:61bb24dc-4f5e-40de-a939-a1fdd1aa8f3f/secret/poc%2Fvpn}"
+    SECRET_UPN="${SECRET_UPN:-}"
     SECRET_KV_KEY="${SECRET_KV_KEY:-shared-key}"
 
     PLAINTEXT="${PLAINTEXT:-My secret data}"
@@ -163,6 +163,12 @@ data:
     [[ -n "${KEY_PATH}"  ]] || die "--key is required"
     [[ -r "${CERT_PATH}" ]] || die "Cannot read cert file: $CERT_PATH"
     [[ -r "${KEY_PATH}"  ]] || die "Cannot read key file:  $KEY_PATH"
+    if [[ "$SKIP_KMS" == "0" ]]; then
+      [[ -n "${KEY_ID}" ]] || die "KEY_ID is required unless SKIP_KMS=1"
+    fi
+    if [[ "$SKIP_SECRET" == "0" ]]; then
+      [[ -n "${SECRET_UPN}" ]] || die "SECRET_UPN is required unless SKIP_SECRET=1"
+    fi
 
     require_cmd curl
     require_cmd openssl
