@@ -4,7 +4,7 @@ Configure a Namespace to be bound to a specific node.
 Example for values files:
       bindtoNode:
         role: infra  # mandatory
-        operator: "Exists" # optional, default Exists
+        operator: "Equal" # optional, default Equal
         effect: "NoSchedule" # optional, default NoSchedule
         value: "reserved" # optional, default reserved
      

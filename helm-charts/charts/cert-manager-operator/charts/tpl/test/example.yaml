@@ -19,7 +19,7 @@
 {{- end }}
 {{- end }}
 
-{{- if .Values.namespace.binddescrtoNode }}
+{{- if .Values.namespace.descr }}
   {{- include "tpl.namespaceDescr" .Values.namespace.descr | nindent 0 }}
 {{- end }}
 
