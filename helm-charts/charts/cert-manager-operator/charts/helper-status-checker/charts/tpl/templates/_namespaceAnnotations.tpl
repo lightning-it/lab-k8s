@@ -13,7 +13,7 @@ Example for values files:
 {{- define "tpl.bindtoNode" -}}
 openshift.io/node-selector: node-role.kubernetes.io/{{ .role }}=
 scheduler.alpha.kubernetes.io/defaultTolerations: >-
-  [{"operator": "{{ .operator | default "Equal" }}", "effect": "{{ .effect | default "NoSchedule" }}", "key":"{{ .role }}", "value": "{{ .value | default "reserved" }}"}]
+  [{"operator": "{{ .operator | default "Equal" }}", "effect": "{{ .effect | default "NoSchedule" }}", "key":"node-role.kubernetes.io/{{ .role }}", "value": "{{ .value | default "reserved" }}"}]
 {{- end }}
 
 {{- define "tpl.namespaceDescr" -}}
