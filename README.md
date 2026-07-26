@@ -71,8 +71,9 @@ Kubernetes lab: PoCs, experiments, and reusable manifests.
 ## Bootstrap with Argo CD
 
 1. Replace `<YOUR_REPO_URL>` in `gitops/argocd/*` and the
-   `<YOUR_REGISTRY>/okms-secret-fetcher:<tag>` image placeholder in the overlay
-   patches.
+   `example.invalid/okms-secret-fetcher:dev` and
+   `example.invalid/okms-secret-fetcher:prod` image placeholders in the
+   corresponding overlay patches.
 2. Apply the project and root application:
 
    ```bash

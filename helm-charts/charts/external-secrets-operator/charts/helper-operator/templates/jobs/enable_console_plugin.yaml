@@ -30,8 +30,17 @@ spec:
               # Be sure to keep the "/-" at the end of the path
 
               new_values=({{ range .Values.console_plugins.plugins }}{{ . | squote }} {{ end }})
+              current_plugins="$(oc get console.operator cluster -o jsonpath='{.spec.plugins}')"
+              if [[ -z "$current_plugins" ]]; then
+                oc patch console.operator cluster --type json \
+                  -p '[{"op": "add", "path": "/spec/plugins", "value": []}]'
+              fi
 
               for value in "${new_values[@]}"; do
+                if ! [[ "$value" =~ ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$ ]]; then
+                  echo "Invalid console plugin name: $value" >&2
+                  exit 1
+                fi
 
                 if verify_if_plugin_is_configured="$(
                   oc get console.operator cluster -o jsonpath='{.spec.plugins}' |
