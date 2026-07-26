@@ -24,8 +24,6 @@ spec:
               value: "<SET_PER_ENVIRONMENT>"
             - name: SECRET_KV_KEY
               value: "shared-key"
-            - name: SKIP_KMS
-              value: "1"
             - name: CERT_PATH
               value: "/etc/okms/tls/tls.crt"
             - name: KEY_PATH
