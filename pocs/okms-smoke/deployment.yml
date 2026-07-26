@@ -16,6 +16,14 @@ spec:
       containers:
         - name: smoke
           image: example.invalid/okms-secret-fetcher:dev
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           command: ["sh", "-lc"]
           env:
             - name: OKMS_REST

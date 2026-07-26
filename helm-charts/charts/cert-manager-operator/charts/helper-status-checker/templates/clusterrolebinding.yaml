@@ -3,9 +3,10 @@
 {{- range .checks }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
   name: {{ .serviceAccount.name }}-{{ .namespace.name }}
+  namespace: {{ .namespace.name | quote }}
   labels:
     {{- include "tpl.labels" $ | nindent 4 }}
   annotations:
@@ -14,7 +15,7 @@ metadata:
     argocd.argoproj.io/sync-wave: {{ .syncwave | default 0 | quote }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
+  kind: Role
   name: {{ .serviceAccount.name }}-{{ .namespace.name }}
 subjects:
   - kind: ServiceAccount

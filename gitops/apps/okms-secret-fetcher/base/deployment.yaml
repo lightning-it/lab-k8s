@@ -27,6 +27,14 @@ spec:
         - name: fetch-okms-secret
           image: example.invalid/okms-secret-fetcher:dev
           imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           envFrom:
             - configMapRef:
                 name: okms-secret-fetcher-config
