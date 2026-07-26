@@ -27,10 +27,10 @@ apiVersion: v1
 metadata:
   name: {{ .name }}
   labels:
-    {{- include "tpl.additionalLabels" .additionalLabels | indent 4 }}
+    {{- include "tpl.additionalLabels" .additionalLabels | nindent 4 }}
   annotations:
     openshift.io/description: {{ .description | quote }}
     openshift.io/display-name: {{ .displayName | quote }}
-    {{- include "tpl.additionalAnnotations" .additionalAnnotations | indent 4 }}
+    {{- include "tpl.additionalAnnotations" .additionalAnnotations | nindent 4 }}
 spec: {}
 {{- end }}

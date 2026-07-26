@@ -40,9 +40,9 @@ metadata:
   name: {{ .name }}
   namespace: {{ .namespace | default "default" }}
   annotations:
-    {{- include "tpl.additionalAnnotations" .additionalAnnotations | indent 4 }}
+    {{- include "tpl.additionalAnnotations" .additionalAnnotations | nindent 4 }}
   labels:
-    {{- include "tpl.additionalLabels" .additionalLabels | indent 4 }}
+    {{- include "tpl.additionalLabels" .additionalLabels | nindent 4 }}
 spec:
   {{- if .minAvailable }}
   minAvailable: {{ .minAvailable }}
