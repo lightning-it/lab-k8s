@@ -70,7 +70,8 @@ Kubernetes lab: PoCs, experiments, and reusable manifests.
 
 ## Bootstrap with Argo CD
 
-1. Replace `<YOUR_REPO_URL>` in `gitops/argocd/*` and the
+1. Replace `<YOUR_REPO_URL>` and `<YOUR_TARGET_REVISION>` in
+   `gitops/argocd/*`, and replace the
    `example.invalid/okms-secret-fetcher:dev` and
    `example.invalid/okms-secret-fetcher:prod` image placeholders in the
    corresponding overlay patches.

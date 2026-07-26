@@ -7,7 +7,7 @@ spec:
   project: lab-k8s
   source:
     repoURL: <YOUR_REPO_URL>
-    targetRevision: main
+    targetRevision: <YOUR_TARGET_REVISION>
     path: gitops/argocd/applications
     directory:
       recurse: true

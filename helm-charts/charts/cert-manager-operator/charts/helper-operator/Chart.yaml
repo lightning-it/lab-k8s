@@ -14,7 +14,8 @@ annotations:
       description: switching some snippets to use global tpl
   artifacthub.io/license: Apache-2.0
   artifacthub.io/signKey: |
-    fingerprint: B677CB52F8358FA091044E375D24D6846DBA8F8A url: https://keys.openpgp.org/vks/v1/by-fingerprint/B677CB52F8358FA091044E375D24D6846DBA8F8A
+    fingerprint: B677CB52F8358FA091044E375D24D6846DBA8F8A
+    url: https://keys.openpgp.org/vks/v1/by-fingerprint/B677CB52F8358FA091044E375D24D6846DBA8F8A
 apiVersion: v2
 dependencies:
 - name: tpl
