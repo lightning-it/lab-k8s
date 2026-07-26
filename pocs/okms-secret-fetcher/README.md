@@ -1,7 +1,7 @@
 # PoC: OKMS Secret Fetcher
 
-Minimal container that reads a secret from OVHcloud OKMS Secret Manager using mTLS (access certificate),
-and prints the value of a configured key to stdout.
+Minimal container that reads a secret from OVHcloud OKMS Secret Manager using mTLS (access certificate)
+and writes the value of a configured key to a protected file. Secret values are never written to stdout.
 
 ## Build
 
@@ -19,6 +19,6 @@ kubectl -n okms create secret tls okms-client --cert <CERT_PEM> --key <KEY_PEM>
 ```
 
 The initContainer writes the secret value to:
-- `/work/shared-key.txt` (default; configurable by env `SECRET_OUT_FILE`)
+- `/work/shared-key.txt` (required and configured by env `SECRET_OUT_FILE`)
 
 Then your app container can read that file.

@@ -3,7 +3,7 @@
 #
 # Fetch a Secret Manager secret value from OVH OKMS using mTLS.
 # - Logs go to STDERR
-# - Secret value is printed to STDOUT (so you can redirect it to a file safely)
+# - Secret value is written only to the configured output file
 #
 # Required args:
 #   --cert <path> --key <path>
@@ -12,7 +12,7 @@
 #   OKMS_REST="https://eu-west-lim.okms.ovh.net"
 #   SECRET_UPN="urn:.../secret/poc%2Fvpn"
 #   SECRET_KV_KEY="shared-key"
-#   SECRET_OUT_FILE=""   (optional: if set, write value to file instead of stdout)
+#   SECRET_OUT_FILE="/work/shared-key.txt"   (required)
 
 set -euo pipefail
 
@@ -37,7 +37,7 @@ Environment:
   OKMS_REST       Base URL like https://eu-west-lim.okms.ovh.net
   SECRET_UPN      urn:v1:.../secret/<ENCODED_PATH>
   SECRET_KV_KEY   Key in secret payload (default: shared-key)
-  SECRET_OUT_FILE If set, write value to this file
+  SECRET_OUT_FILE Required path for the secret value (never written to stdout)
 
 EOF
 }
@@ -56,6 +56,7 @@ done
 [[ -r "$CERT_PATH" ]] || die "Cannot read cert file: $CERT_PATH"
 [[ -r "$KEY_PATH"  ]] || die "Cannot read key file:  $KEY_PATH"
 [[ -n "$SECRET_UPN" ]] || die "SECRET_UPN env var must be set"
+[[ -n "$SECRET_OUT_FILE" ]] || die "SECRET_OUT_FILE env var must be set"
 
 have_cmd curl || die "curl is required"
 have_cmd jq   || die "jq is required"
@@ -106,12 +107,7 @@ if [[ -z "$val" || "$val" == "null" ]]; then
   die "Could not find key '$SECRET_KV_KEY' in response from $found_url"
 fi
 
-if [[ -n "$SECRET_OUT_FILE" ]]; then
-  umask 077
-  mkdir -p "$(dirname "$SECRET_OUT_FILE")" 2>/dev/null || true
-  printf "%s" "$val" > "$SECRET_OUT_FILE"
-  log "Wrote secret value to $SECRET_OUT_FILE"
-else
-  # Print ONLY the value to stdout
-  printf "%s\n" "$val"
-fi
+umask 077
+mkdir -p "$(dirname "$SECRET_OUT_FILE")" 2>/dev/null || true
+printf "%s" "$val" > "$SECRET_OUT_FILE"
+log "Wrote secret value to $SECRET_OUT_FILE"
