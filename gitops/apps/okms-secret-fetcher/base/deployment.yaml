@@ -23,6 +23,8 @@ spec:
             secretName: okms-client
         - name: secret-out
           emptyDir: {}
+        - name: tmp
+          emptyDir: {}
       initContainers:
         - name: fetch-okms-secret
           image: example.invalid/okms-secret-fetcher:dev
@@ -45,6 +47,8 @@ spec:
               readOnly: true
             - name: secret-out
               mountPath: /work
+            - name: tmp
+              mountPath: /tmp
       containers:
         - name: app
           image: alpine:3.20
