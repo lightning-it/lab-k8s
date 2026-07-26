@@ -15,11 +15,17 @@ metadata:
   labels:
     {{- include "tpl.labels" $ | nindent 4 }}
 rules:
-{{- if eq ($approver | toString) "true" }}
   - apiGroups:
       - operators.coreos.com
     resources:
       - clusterserviceversions
+    verbs:
+      - get
+      - list
+{{- if eq ($approver | toString) "true" }}
+  - apiGroups:
+      - operators.coreos.com
+    resources:
       - installplans
       - subscriptions
     verbs:
