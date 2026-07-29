@@ -124,6 +124,8 @@ def sync_instructions() -> None:
 def execute_checks(config: dict) -> list[dict]:
     results: list[dict] = []
     for check in config["checks"]:
+        if not isinstance(check, dict):
+            raise RuntimeError("each check must be an object")
         name = check.get("name")
         command = check.get("command")
         if not name or not isinstance(command, list) or not command:
@@ -173,7 +175,7 @@ def changed_paths() -> list[str]:
 
 def ensure_review_safe(diff: str) -> None:
     unsafe = []
-    for path in changed_paths():
+    for path in sorted(set(changed_paths() + planned_paths())):
         lowered = path.lower()
         if any(part in lowered for part in SECRET_PATH_PARTS):
             unsafe.append(path)
@@ -194,14 +196,32 @@ def planned_diff() -> str:
         capture=True,
     )
     if upstream.returncode == 0:
-        candidate = git_output(
+        return git_output(
             "diff", "--no-ext-diff", "--unified=40", f"{upstream.stdout.strip()}...HEAD"
         )
-        if candidate:
-            return candidate
     return git_output(
         "diff", "--no-ext-diff", "--unified=40", EMPTY_TREE, "HEAD"
     )
+
+
+def planned_paths() -> list[str]:
+    worktree = git_output("diff", "--name-only", "-z", "HEAD")
+    if worktree:
+        return [path for path in worktree.split("\0") if path]
+    upstream = run(
+        ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+        capture=True,
+    )
+    if upstream.returncode == 0:
+        names = git_output(
+            "diff",
+            "--name-only",
+            "-z",
+            f"{upstream.stdout.strip()}...HEAD",
+        )
+        return [path for path in names.split("\0") if path]
+    names = git_output("diff", "--name-only", "-z", EMPTY_TREE, "HEAD")
+    return [path for path in names.split("\0") if path]
 
 
 def copilot_review(config: dict) -> dict:
