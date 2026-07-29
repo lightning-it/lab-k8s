@@ -21,10 +21,10 @@ Publishing targets: `none`.
 
 ## Supported and Tested Platforms
 
-| Platform / Product | Status | Validation |
-|---|---:|---|
-| ubuntu-latest | Supported | Repository CI |
-| kubernetes | Tested where applicable | Repository CI |
+| Platform / Product |                  Status | Validation    |
+| ------------------ | ----------------------: | ------------- |
+| ubuntu-latest      |               Supported | Repository CI |
+| kubernetes         | Tested where applicable | Repository CI |
 
 <!-- END LIT_SHARED_RELEASE_MODEL -->
 

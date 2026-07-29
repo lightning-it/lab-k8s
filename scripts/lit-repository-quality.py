@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import subprocess
@@ -22,6 +24,13 @@ LICENSE_HEADERS = {
     "GPL-3.0-only": "GNU GENERAL PUBLIC LICENSE",
     "GPL-3.0-or-later": "GNU GENERAL PUBLIC LICENSE",
 }
+INVALID_BADGE_VALUES = re.compile(r"(container\s+\(?none\)?|\((?:none|null|undefined)\)|\bundefined\b|\bnull\b)", re.I)
+QUAY_STATUS_URL = re.compile(
+    r"https?://quay\.io/repository/"
+    r"[^/\s)\]}>\"'<]+/[^/\s)\]}>\"'<]+/status"
+    r"(?:[/?#][^\s)\]}>\"'<]*)?",
+    re.IGNORECASE,
+)
 
 
 def metadata() -> dict[str, str]:
@@ -81,11 +90,19 @@ def quality_badge_block(readme: str) -> str:
     return readme[start : end + len(QUALITY_END)]
 
 
+def check_quality_badge_block(badge_block: str) -> None:
+    if QUAY_STATUS_URL.search(badge_block):
+        raise AssertionError("README.md uses Quay status badge endpoint")
+    if INVALID_BADGE_VALUES.search(badge_block):
+        raise AssertionError("README.md quality badge block contains invalid placeholder value")
+
+
 def check_generated_docs(meta: dict[str, str]) -> None:
     readme = assert_file(ROOT / "README.md")
     release = assert_file(ROOT / "RELEASE.md")
     testing = assert_file(ROOT / "TESTING.md")
     openssf = assert_file(ROOT / "OPENSSF.md")
+    badge_block = quality_badge_block(readme)
     assert_file(ROOT / ".lit" / "repository.yml")
     license_spdx = meta.get("license_spdx", "MIT")
 
@@ -116,7 +133,7 @@ def check_generated_docs(meta: dict[str, str]) -> None:
     placeholder = re.compile(r"(TODO|TBD|PLACEHOLDER|FIXME)", re.IGNORECASE)
     generated_texts = [
         ("README.md managed block", managed_readme_block(readme)),
-        ("README.md quality badge block", quality_badge_block(readme)),
+        ("README.md quality badge block", badge_block),
         ("RELEASE.md", release),
         ("TESTING.md", testing),
         ("OPENSSF.md", openssf),
@@ -124,6 +141,7 @@ def check_generated_docs(meta: dict[str, str]) -> None:
     for label, text in generated_texts:
         if placeholder.search(text):
             raise AssertionError(f"{label} contains unresolved placeholder text")
+    check_quality_badge_block(badge_block)
 
     if "License-MIT" in readme and license_spdx != "MIT":
         raise AssertionError(f"README.md has MIT badge but license_spdx is {license_spdx}")
@@ -208,12 +226,122 @@ def check_markdown() -> None:
             raise AssertionError(f"{path.name} must end with a newline")
 
 
+def check_managed_assets() -> None:
+    """Verify the optional repository-specific provenance inventory."""
+    inventory_path = ROOT / ".lit" / "managed-assets.json"
+    if not inventory_path.exists():
+        return
+    try:
+        inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise AssertionError(
+            f".lit/managed-assets.json cannot be read as JSON: {exc}"
+        ) from exc
+    if not isinstance(inventory, dict):
+        raise AssertionError(".lit/managed-assets.json root must be an object")
+    if inventory.get("schema_version") != 1:
+        raise AssertionError(".lit/managed-assets.json schema_version must be 1")
+    assets = inventory.get("assets")
+    if not isinstance(assets, list):
+        raise AssertionError(".lit/managed-assets.json assets must be a list")
+
+    seen: set[str] = set()
+    allowed = {
+        "central-managed",
+        "local-required",
+        "private-configuration",
+    }
+    for asset in assets:
+        if not isinstance(asset, dict):
+            raise AssertionError("managed asset entries must be objects")
+        path_text = asset.get("path", "")
+        category = asset.get("category", "")
+        if not isinstance(path_text, str) or not path_text:
+            raise AssertionError(f"managed asset path must be a non-empty string: {path_text!r}")
+        if not isinstance(category, str):
+            raise AssertionError(f"{path_text}: managed asset category must be a string")
+        relative_path = Path(path_text)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            raise AssertionError(f"{path_text}: managed asset path must be repository-relative")
+        normalized_path = relative_path.as_posix()
+        if normalized_path in {"", "."} or normalized_path != path_text:
+            raise AssertionError(f"{path_text}: managed asset path must be normalized")
+        if normalized_path in seen:
+            raise AssertionError(f"managed asset path is duplicated: {normalized_path!r}")
+        seen.add(normalized_path)
+        if category not in allowed:
+            raise AssertionError(f"{path_text}: invalid managed asset category {category!r}")
+        path = ROOT / normalized_path
+        if path.is_symlink():
+            raise AssertionError(f"{path_text}: inventoried assets may not be symlinks")
+        if not path.is_file():
+            raise AssertionError(f"{path_text}: inventoried asset is missing")
+        if category == "central-managed":
+            source = asset.get("source")
+            if not isinstance(source, str) or not source.strip():
+                raise AssertionError(f"{path_text}: central-managed asset has no source")
+            expected_digest = asset.get("sha256")
+            if not isinstance(expected_digest, str) or not re.fullmatch(
+                r"[0-9a-f]{64}", expected_digest
+            ):
+                raise AssertionError(
+                    f"{path_text}: central-managed sha256 must be 64 lowercase hex characters"
+                )
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            if digest != expected_digest:
+                raise AssertionError(
+                    f"{path_text}: unsupported local drift from centrally managed source"
+                )
+        elif category in {"local-required", "private-configuration"}:
+            purpose = asset.get("purpose")
+            owner = asset.get("owner")
+            if (
+                not isinstance(purpose, str)
+                or not purpose.strip()
+                or not isinstance(owner, str)
+                or not owner.strip()
+            ):
+                raise AssertionError(f"{path_text}: local asset needs purpose and owner")
+
+    try:
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="surrogateescape",
+        ).stdout.split("\0")
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise AssertionError(
+            "managed asset inventory requires a readable Git worktree"
+        ) from exc
+    ignored_prefixes = ("docs/", "dist/")
+    current = {
+        path_text
+        for path_text in tracked
+        if path_text
+        and path_text != inventory_path.relative_to(ROOT).as_posix()
+        and not path_text.startswith(ignored_prefixes)
+        and "__pycache__" not in Path(path_text).parts
+        and not path_text.endswith(".pyc")
+    }
+    missing = sorted(current - seen)
+    stale = sorted(seen - current)
+    if missing:
+        raise AssertionError(f"non-doc assets missing from provenance inventory: {', '.join(missing)}")
+    if stale:
+        raise AssertionError(f"stale provenance inventory entries: {', '.join(stale)}")
+
+
 def main() -> int:
     try:
         meta = metadata()
         check_generated_docs(meta)
         check_secret_safe_generated_docs()
         check_markdown()
+        check_managed_assets()
         repo_type = meta.get("repository_type", "")
         check_terraform(repo_type)
         check_helm(repo_type)

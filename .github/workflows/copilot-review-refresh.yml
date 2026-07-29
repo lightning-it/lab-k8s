@@ -1,0 +1,86 @@
+# Managed by lightning-it/shared-assets-lit.
+# Do not edit downstream copies directly.
+# yamllint disable rule:truthy rule:line-length
+---
+name: Refresh Copilot review gate
+
+on:
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: copilot-review-refresh-${{ github.event.pull_request.number }}
+  # Review replies and thread updates can arrive as a burst. Let each tiny
+  # refresher finish so canceled helper checks do not pollute the PR status.
+  cancel-in-progress: false
+
+jobs:
+  refresh-canonical-gate:
+    name: Refresh canonical Copilot review gate
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (
+        github.actor == 'copilot-pull-request-reviewer' ||
+        github.actor == 'copilot-pull-request-reviewer[bot]' ||
+        contains(fromJSON('["COLLABORATOR","MEMBER","OWNER"]'), github.event.review.author_association) ||
+        contains(fromJSON('["COLLABORATOR","MEMBER","OWNER"]'), github.event.comment.author_association)
+      )
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Rerun the canonical pull request gate when needed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          runs_url="repos/${REPOSITORY}/actions/runs"
+
+          for attempt in $(seq 1 10); do
+            response="$(gh api "${runs_url}?event=pull_request&head_sha=${HEAD_SHA}&per_page=100")"
+            run="$(
+              jq -c --arg head_sha "${HEAD_SHA}" --argjson pr "${PR_NUMBER}" '
+                [
+                  .workflow_runs[]?
+                  | select(.head_sha == $head_sha)
+                  | select(.path == ".github/workflows/copilot-review.yml")
+                  | select(any(.pull_requests[]?; .number == $pr))
+                ]
+                | sort_by(.run_number)
+                | reverse
+                | .[0] // empty
+              ' <<<"${response}"
+            )"
+
+            if [ -n "${run}" ]; then
+              run_id="$(jq -r '.id' <<<"${run}")"
+              status="$(jq -r '.status' <<<"${run}")"
+              if [ "${status}" = "completed" ]; then
+                gh api --method POST "repos/${REPOSITORY}/actions/runs/${run_id}/rerun"
+                echo "Rerun requested for canonical Copilot gate ${run_id}."
+              else
+                echo "Canonical Copilot gate ${run_id} is ${status}; its polling loop will observe the review event."
+              fi
+              exit 0
+            fi
+
+            echo "Canonical gate not visible yet (attempt ${attempt}/10)."
+            sleep 6
+          done
+
+          echo "No canonical pull_request gate found for PR #${PR_NUMBER} at ${HEAD_SHA}." >&2
+          exit 1
