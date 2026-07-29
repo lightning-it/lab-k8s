@@ -226,6 +226,50 @@ def check_markdown() -> None:
             raise AssertionError(f"{path.name} must end with a newline")
 
 
+def check_embedded_code() -> None:
+    result = subprocess.run(
+        ["git", "-c", f"safe.directory={ROOT}", "ls-files", "-z"],
+        cwd=ROOT,
+        text=True,
+        encoding="utf-8",
+        errors="surrogateescape",
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        details = result.stderr.strip()
+        raise AssertionError(
+            "cannot enumerate tracked Markdown files with git ls-files"
+            + (f": {details}" if details else "")
+        )
+    markdown_paths = sorted(
+        path
+        for path in result.stdout.split("\0")
+        if path and Path(path).suffix.lower() == ".md"
+    )
+    if markdown_paths:
+        validator = ROOT / "scripts" / "validate-embedded-code.py"
+        shared_validator = ROOT / "default" / "scripts" / "validate-embedded-code.py"
+        if not validator.is_file() and shared_validator.is_file():
+            validator = shared_validator
+        command_prefix = [
+            sys.executable,
+            validator.relative_to(ROOT).as_posix(),
+        ]
+        batch: list[str] = []
+        batch_bytes = 0
+        for path in markdown_paths:
+            path_bytes = len(os.fsencode(path)) + 1
+            if batch and (len(batch) >= 100 or batch_bytes + path_bytes > 60_000):
+                run([*command_prefix, *batch])
+                batch = []
+                batch_bytes = 0
+            batch.append(path)
+            batch_bytes += path_bytes
+        if batch:
+            run([*command_prefix, *batch])
+
+
 def check_managed_assets() -> None:
     """Verify the optional repository-specific provenance inventory."""
     inventory_path = ROOT / ".lit" / "managed-assets.json"
@@ -341,6 +385,7 @@ def main() -> int:
         check_generated_docs(meta)
         check_secret_safe_generated_docs()
         check_markdown()
+        check_embedded_code()
         check_managed_assets()
         repo_type = meta.get("repository_type", "")
         check_terraform(repo_type)
