@@ -26,7 +26,10 @@ SHARED_ROOT = SCRIPT.parents[2]
 ROOT = (
     SHARED_ROOT
     if DISTRIBUTED_ROOT.name == "default"
-    and (SHARED_ROOT / "release-model" / "repositories.yml").is_file()
+    and (
+        (SHARED_ROOT / ".git").exists()
+        or (SHARED_ROOT / "release-model" / "repositories.yml").is_file()
+    )
     else DISTRIBUTED_ROOT
 )
 FENCE = re.compile(
@@ -44,7 +47,9 @@ def validator_candidate(
     fence_index: int,
     suffix: str,
 ) -> Path:
-    path_digest = hashlib.sha256(markdown_path.encode()).hexdigest()[:12]
+    path_digest = hashlib.sha256(
+        markdown_path.encode("utf-8", errors="surrogateescape")
+    ).hexdigest()[:12]
     return temporary / f"{kind}-{path_digest}-{fence_index}.{suffix}"
 
 
