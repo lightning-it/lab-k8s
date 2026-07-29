@@ -30,12 +30,11 @@ jobs:
       - name: Verify Codex and Copilot instruction parity
         run: python3 scripts/lit-push-ready.py instructions
 
+      - name: Install repository quality dependencies
+        run: python3 -m pip install PyYAML==6.0.3
+
       - name: Run Lightning IT repository quality checks
         run: python3 scripts/lit-repository-quality.py
-
-      - name: Install GitHub policy audit dependencies
-        if: hashFiles('scripts/audit-github-release-model.py') != '' && (hashFiles('release-model/repositories.yml') != '' || hashFiles('shared-assets/release-model/repositories.yml') != '')
-        run: python3 -m pip install pyyaml
 
       - name: Build desired GitHub policy evidence
         if: hashFiles('scripts/audit-github-release-model.py') != '' && (hashFiles('release-model/repositories.yml') != '' || hashFiles('shared-assets/release-model/repositories.yml') != '')
