@@ -37,8 +37,13 @@ jobs:
         run: python3 scripts/lit-repository-quality.py
 
       - name: Build desired GitHub policy evidence
-        if: hashFiles('scripts/audit-github-release-model.py') != '' && (hashFiles('release-model/repositories.yml') != '' || hashFiles('shared-assets/release-model/repositories.yml') != '')
-        run: python3 scripts/audit-github-release-model.py --output dist/github-release-model-audit.json
+        if: >-
+          hashFiles('scripts/audit-github-release-model.py') != '' &&
+          (hashFiles('release-model/repositories.yml') != '' ||
+          hashFiles('shared-assets/release-model/repositories.yml') != '')
+        run: >-
+          python3 scripts/audit-github-release-model.py
+          --output dist/github-release-model-audit.json
 
       - name: Upload desired GitHub policy evidence
         if: hashFiles('dist/github-release-model-audit.json') != ''
