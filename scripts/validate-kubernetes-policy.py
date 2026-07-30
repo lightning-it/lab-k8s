@@ -233,8 +233,12 @@ def validate_rbac(source: str, resource: dict[str, Any]) -> list[str]:
 def validate_secret(source: str, resource: dict[str, Any]) -> list[str]:
     if resource.get("kind") != "Secret":
         return []
-    payload = resource.get("data") or resource.get("stringData")
-    if not payload:
+    payloads = [
+        resource[field]
+        for field in ("data", "stringData")
+        if field in resource and resource[field]
+    ]
+    if not payloads:
         return []
 
     def values(value: object) -> list[str]:
@@ -244,18 +248,18 @@ def validate_secret(source: str, resource: dict[str, Any]) -> list[str]:
             return [item for child in value for item in values(child)]
         return [str(value)]
 
-    payload_values = values(payload)
+    payload_values = [
+        value for payload in payloads for value in values(payload)
+    ]
     if payload_values and all(
         not value.strip() or "pleaseoverwrite" in value.lower()
         for value in payload_values
     ):
         return []
-    if payload:
-        return [
-            f"{source}: committed Secret payloads are forbidden unless every "
-            "value is an explicit non-deployable placeholder"
-        ]
-    return []
+    return [
+        f"{source}: committed Secret payloads are forbidden unless every "
+        "value is an explicit non-deployable placeholder"
+    ]
 
 
 def validate_argocd(source: str, resource: dict[str, Any]) -> list[str]:

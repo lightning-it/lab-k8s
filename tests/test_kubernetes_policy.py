@@ -92,6 +92,17 @@ class KubernetesPolicyTests(unittest.TestCase):
         errors = POLICY.validate([("fixture", secret)])
         self.assertTrue(any("Secret payloads are forbidden" in error for error in errors))
 
+    def test_secret_checks_data_and_string_data(self) -> None:
+        secret = {
+            "apiVersion": "v1",
+            "kind": "Secret",
+            "metadata": {"name": "unsafe"},
+            "data": {"placeholder": "pleaseoverwrite"},
+            "stringData": {"token": "not-allowed"},
+        }
+        errors = POLICY.validate([("fixture", secret)])
+        self.assertTrue(any("Secret payloads are forbidden" in error for error in errors))
+
     def test_mutable_argocd_revision_fails(self) -> None:
         application = {
             "apiVersion": "argoproj.io/v1alpha1",
