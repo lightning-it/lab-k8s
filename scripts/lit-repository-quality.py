@@ -188,13 +188,49 @@ def check_secret_safe_generated_docs() -> None:
 def check_terraform(repo_type: str) -> None:
     if repo_type not in {"terraform_module", "terraform_policy"}:
         return
-    tf_files = sorted(ROOT.glob("*.tf"))
+    tf_files = sorted(
+        path
+        for path in ROOT.glob("**/*.tf")
+        if ".terraform" not in path.relative_to(ROOT).parts
+    )
     if not tf_files:
-        raise AssertionError("Terraform repository has no root *.tf files")
+        raise AssertionError(
+            "Terraform repository has no *.tf files outside .terraform directories"
+        )
+    if repo_type == "terraform_module" and not any(path.parent == ROOT for path in tf_files):
+        raise AssertionError("Terraform module repository has no root *.tf files")
     if shutil_which("terraform"):
         run(["terraform", "fmt", "-check", "-recursive"])
-        run(["terraform", "init", "-backend=false", "-input=false"])
-        run(["terraform", "validate", "-no-color"])
+        if repo_type == "terraform_module":
+            validation_roots = [ROOT]
+        else:
+            validation_roots = sorted(
+                {
+                    path.parent
+                    for path in tf_files
+                    if (path.parent / ".terraform.lock.hcl").is_file()
+                    or (path.parent / "versions.tf").is_file()
+                    or (path.parent / "backend.tf").is_file()
+                }
+            )
+            if not validation_roots:
+                raise AssertionError(
+                    "Terraform policy repository has no explicit validation root; "
+                    "add .terraform.lock.hcl, versions.tf, or backend.tf"
+                )
+        for validation_root in validation_roots:
+            relative_root = validation_root.relative_to(ROOT)
+            chdir = "." if relative_root == Path(".") else relative_root.as_posix()
+            run(
+                [
+                    "terraform",
+                    f"-chdir={chdir}",
+                    "init",
+                    "-backend=false",
+                    "-input=false",
+                ]
+            )
+            run(["terraform", f"-chdir={chdir}", "validate", "-no-color"])
     else:
         print("Terraform CLI not installed; checked Terraform file presence only")
 
