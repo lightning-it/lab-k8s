@@ -86,7 +86,9 @@ Kubernetes lab: PoCs, experiments, and reusable manifests.
    private keys:
 
    ```bash
-   kubectl -n okms create secret tls okms-client --cert <CERT_PEM> --key <KEY_PEM>
+   kubectl -n okms create secret tls okms-client \
+     --cert=path/to/client.crt \
+     --key=path/to/client.key
    ```
 
 ## OKMS Secret Fetcher PoC

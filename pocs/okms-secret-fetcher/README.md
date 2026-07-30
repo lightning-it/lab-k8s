@@ -15,7 +15,9 @@ docker push <YOUR_REGISTRY>/okms-secret-fetcher:dev
 Use GitOps manifests in `gitops/apps/okms-secret-fetcher`.
 Create the TLS secret `okms-client` in namespace `okms`:
 ```bash
-kubectl -n okms create secret tls okms-client --cert <CERT_PEM> --key <KEY_PEM>
+kubectl -n okms create secret tls okms-client \
+  --cert=path/to/client.crt \
+  --key=path/to/client.key
 ```
 
 The initContainer writes the secret value to:
