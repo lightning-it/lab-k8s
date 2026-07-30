@@ -61,37 +61,6 @@
       "groupName": "github-actions"
     },
     {
-      "description": "Keep heavy validation profiles on their tested Python 3.11 runtime",
-      "matchManagers": [
-        "github-actions"
-      ],
-      "matchFileNames": [
-        ".github/workflows/collection-quality-profile.yml",
-        ".github/workflows/collection-molecule-profile.yml",
-        ".github/workflows/packer-nested-esxi-profile.yml",
-        ".github/workflows/validation-contracts.yml"
-      ],
-      "matchDepNames": [
-        "python"
-      ],
-      "allowedVersions": "/^3\\.11(?:\\.\\d+)?$/",
-      "groupName": "python 3.11 lockfile runtimes"
-    },
-    {
-      "description": "Keep public workbench acceptance on its tested Python 3.13 runtime",
-      "matchManagers": [
-        "github-actions"
-      ],
-      "matchFileNames": [
-        ".github/workflows/workbench-public-acceptance.yml"
-      ],
-      "matchDepNames": [
-        "python"
-      ],
-      "allowedVersions": "/^3\\.13(?:\\.\\d+)?$/",
-      "groupName": "python 3.13 workbench runtime"
-    },
-    {
       "description": "Keep repository checks aligned with their lockfile",
       "matchManagers": [
         "github-actions"
