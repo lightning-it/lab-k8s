@@ -9,10 +9,19 @@
       ]
     },
     {
-      "name": "diff-check",
+      "name": "diff-check-worktree",
       "command": [
         "git",
         "diff",
+        "--check"
+      ]
+    },
+    {
+      "name": "diff-check-index",
+      "command": [
+        "git",
+        "diff",
+        "--cached",
         "--check"
       ]
     }

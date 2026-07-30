@@ -1,0 +1,27 @@
+{{- if .Values.issuer.vault.enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.issuer.vault.name }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.issuer.vault.syncwave | quote }}
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  vault:
+    auth:
+      appRole:
+        path: {{ .Values.issuer.vault.hashicorpVault.appRole.path }}
+        roleId: {{ .Values.issuer.vault.hashicorpVault.appRole.id }}
+        secretRef:
+          key: secretId
+          name: {{ .Values.vaultAppRoleSecret.name }}
+    path: {{ .Values.issuer.vault.hashicorpVault.path }}
+    {{- if .Values.issuer.vault.hashicorpVault.namespace }}
+    namespace: {{ .Values.issuer.vault.hashicorpVault.namespace }}
+    {{- end }}
+    server: {{ .Values.issuer.vault.hashicorpVault.server }}
+    caBundleSecretRef:
+      name: {{ .Values.issuer.vault.hashicorpVault.caBundleSecretRef.name }}
+      key: ca.crt
+{{- end }}

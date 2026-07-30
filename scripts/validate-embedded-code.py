@@ -14,8 +14,11 @@ from pathlib import Path
 
 try:
     import yaml
-except ImportError:  # Local quality runs remain useful without optional CI deps.
-    yaml = None
+except ImportError as error:
+    raise SystemExit(
+        "PyYAML is required for fail-closed embedded YAML validation: "
+        "python3 -m pip install PyYAML==6.0.3"
+    ) from error
 
 SCRIPT = Path(__file__).resolve()
 DISTRIBUTED_ROOT = SCRIPT.parents[1]
@@ -23,7 +26,10 @@ SHARED_ROOT = SCRIPT.parents[2]
 ROOT = (
     SHARED_ROOT
     if DISTRIBUTED_ROOT.name == "default"
-    and (SHARED_ROOT / "release-model" / "repositories.yml").is_file()
+    and (
+        (SHARED_ROOT / ".git").exists()
+        or (SHARED_ROOT / "release-model" / "repositories.yml").is_file()
+    )
     else DISTRIBUTED_ROOT
 )
 FENCE = re.compile(
@@ -41,7 +47,9 @@ def validator_candidate(
     fence_index: int,
     suffix: str,
 ) -> Path:
-    path_digest = hashlib.sha256(markdown_path.encode()).hexdigest()[:12]
+    path_digest = hashlib.sha256(
+        markdown_path.encode("utf-8", errors="surrogateescape")
+    ).hexdigest()[:12]
     return temporary / f"{kind}-{path_digest}-{fence_index}.{suffix}"
 
 
@@ -77,13 +85,10 @@ def main() -> int:
                 language = language.lower()
                 label = f"{name}:fence-{index}"
                 if language in {"yaml", "yml", "ansible"}:
-                    if yaml is None:
-                        print(f"PyYAML unavailable; skipped YAML parse for {label}")
-                    else:
-                        try:
-                            yaml.safe_load(content)
-                        except yaml.YAMLError as error:
-                            failures.append(f"{label}: invalid YAML: {error}")
+                    try:
+                        yaml.safe_load(content)
+                    except yaml.YAMLError as error:
+                        failures.append(f"{label}: invalid YAML: {error}")
                     if language == "ansible" and shutil.which("ansible-lint"):
                         candidate = validator_candidate(
                             temp,

@@ -1,5 +1,8 @@
 # lab-k8s
 
+Enterprise Kubernetes, Helm, and GitOps quality requirements are documented in
+[KUBERNETES_QUALITY.md](KUBERNETES_QUALITY.md).
+
 <!-- BEGIN LIT_SHARED_RELEASE_MODEL -->
 
 ## Release and Quality Model
@@ -62,6 +65,39 @@ Use the repository-specific examples below. Public examples must stay sanitized 
 - [SECURITY.md](./SECURITY.md)
 
 Kubernetes lab: PoCs, experiments, and reusable manifests.
+
+## Lab Structure
+
+- `pocs/` – source code and container build contexts for proofs of concept
+- `gitops/` – Argo CD and Kustomize-ready app-of-apps manifests
+
+## Bootstrap with Argo CD
+
+1. Replace `<YOUR_REPO_URL>` and `<YOUR_TARGET_REVISION>` in
+   `gitops/argocd/*`, and replace the
+   `example.invalid/okms-secret-fetcher:dev` and
+   `example.invalid/okms-secret-fetcher:prod` image placeholders in the
+   corresponding overlay patches.
+2. Apply the project and root application:
+
+   ```bash
+   kubectl apply -f gitops/argocd/projects/lab-k8s.yaml
+   kubectl apply -f gitops/argocd/app-of-apps/lab-k8s-root.yaml
+   ```
+
+3. Create the OKMS mTLS client certificate secret out of band; never commit
+   private keys:
+
+   ```bash
+   kubectl -n okms create secret tls okms-client \
+     --cert=path/to/client.crt \
+     --key=path/to/client.key
+   ```
+
+## OKMS Secret Fetcher PoC
+
+- Application source: `pocs/okms-secret-fetcher/app`
+- GitOps manifests: `gitops/apps/okms-secret-fetcher`
 
 ## Security
 

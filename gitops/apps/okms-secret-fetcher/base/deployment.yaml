@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: okms-secret-fetcher-demo
+  namespace: okms
+  labels:
+    app: okms-secret-fetcher-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: okms-secret-fetcher-demo
+  template:
+    metadata:
+      labels:
+        app: okms-secret-fetcher-demo
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 10001
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: okms-tls
+          secret:
+            secretName: okms-client
+            defaultMode: 0400
+        - name: secret-out
+          emptyDir:
+            sizeLimit: 1Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Mi
+      initContainers:
+        - name: fetch-okms-secret
+          image: example.invalid/okms-secret-fetcher@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          envFrom:
+            - configMapRef:
+                name: okms-secret-fetcher-config
+          args: ["--cert", "/etc/okms/tls/tls.crt", "--key", "/etc/okms/tls/tls.key"]
+          volumeMounts:
+            - name: okms-tls
+              mountPath: /etc/okms/tls
+              readOnly: true
+            - name: secret-out
+              mountPath: /work
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: app
+          image: docker.io/library/alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "test -s /work/shared-key.txt"]
+            initialDelaySeconds: 1
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "test -s /work/shared-key.txt"]
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          command: ["/bin/sh", "-lc"]
+          args:
+            - |
+              set -e
+              echo "Secret file is at /work/shared-key.txt";
+              ls -l /work;
+              test -s /work/shared-key.txt;
+              echo "Secret file is present and non-empty.";
+              sleep 3600
+          volumeMounts:
+            - name: secret-out
+              mountPath: /work

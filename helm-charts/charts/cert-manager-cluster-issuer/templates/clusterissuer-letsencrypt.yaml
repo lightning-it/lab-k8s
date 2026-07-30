@@ -1,0 +1,22 @@
+{{- if .Values.issuer.letsencrypt.enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.issuer.letsencrypt.name }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.issuer.letsencrypt.syncwave | quote }}
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  acme:
+    server: {{ .Values.issuer.letsencrypt.server }}
+    email: {{ .Values.issuer.letsencrypt.email }}
+    privateKeySecretRef:
+      name: {{ .Values.issuer.letsencrypt.name }}-account-key
+    solvers:
+    - dns01:
+        cloudflare:
+          apiTokenSecretRef:
+            name: cloudflare-api-token
+            key: api-token
+{{- end }}

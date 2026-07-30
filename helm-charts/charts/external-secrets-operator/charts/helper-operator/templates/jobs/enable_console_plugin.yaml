@@ -1,0 +1,65 @@
+{{- if .Values.console_plugins }}
+{{- if eq (.Values.console_plugins.enabled | toString) "true" }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: enable-console-plugin
+  namespace: {{ .Values.console_plugins.job_namespace | default "openshift-gitops" }}
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded,HookFailed
+    argocd.argoproj.io/sync-wave: {{ .Values.console_plugins.syncwave | default 5 | quote }}
+  labels:
+    {{- include "tpl.labels" $ | nindent 4 }}
+spec:
+  template:
+    metadata:
+      name: enable-console-plugin
+    spec:
+      containers:
+        - name: enable-console-plugin
+          image: quay.io/openshift/origin-cli@sha256:418a77de8c4ff1f9e26ec3aaf7bb85a7c71ad5f7e7449f6373bbc738fb012dfa
+          command:
+            - /bin/bash
+            - -c
+            - |
+              #!/usr/bin/env bash
+
+              # Patch console.operator
+              # Be sure to keep the "/-" at the end of the path
+
+              new_values=({{ range .Values.console_plugins.plugins }}{{ . | squote }} {{ end }})
+              current_plugins="$(oc get console.operator cluster -o jsonpath='{.spec.plugins}')"
+              if [[ -z "$current_plugins" ]]; then
+                oc patch console.operator cluster --type json \
+                  -p '[{"op": "add", "path": "/spec/plugins", "value": []}]'
+              fi
+
+              for value in "${new_values[@]}"; do
+                if ! [[ "$value" =~ ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$ ]]; then
+                  echo "Invalid console plugin name: $value" >&2
+                  exit 1
+                fi
+
+                if verify_if_plugin_is_configured="$(
+                  oc get console.operator cluster -o jsonpath='{.spec.plugins}' |
+                    grep -F -- "$value"
+                )"; then
+
+                  echo "Plugin $value is already configured. (Plugins: $verify_if_plugin_is_configured)"
+
+                else
+
+                  echo "Plugin $value is not yet configured ... adding it to the list"
+
+                  oc patch console.operator cluster --type json -p '[{"op": "add", "path": "/spec/plugins/-", "value": "'$value'" }]'
+
+                  echo "Plugin $value has been added"
+                fi
+              done
+
+      restartPolicy: Never
+      serviceAccountName: {{ .Values.console_plugins.job_service_account | default "enable-console-plugin-sa" }}
+{{- end }}
+{{- end }}

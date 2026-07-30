@@ -1,0 +1,90 @@
+---
+global:
+  baseDomain: pleaseoverwrite.com
+  envName: kub01
+  ingressSuffix: apps
+
+dashboardIngress:
+  tlsSecretName: rook-ceph-dashboard-tls
+
+rook-ceph-cluster:
+  # -- Namespace of the main rook operator
+  operatorNamespace: rook-ceph
+
+  # Installs a debugging toolbox deployment
+  toolbox:
+    # -- Enable Ceph debugging pod deployment
+    enabled: false
+    # -- Toolbox container security context
+    containerSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 2016
+      runAsGroup: 2016
+      capabilities:
+        drop: ["ALL"]
+    # -- Toolbox resources
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "1Gi"
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+
+  monitoring:
+    # -- Enable Prometheus integration
+    enabled: true
+    # -- Whether to disable the metrics reported by Ceph
+    metricsDisabled: false
+    # -- Whether to create the Prometheus rules for Ceph alerts
+    createPrometheusRules: true
+
+  cephClusterSpec:
+    monitoring:
+      enabled: true
+      metricsDisabled: false
+      exporter:
+        perfCountersPrioLimit: 5
+        statsPeriodSeconds: 5
+    network:
+      connections:
+        encryption:
+          enabled: true
+        requireMsgr2: true
+        compression:
+          enabled: false
+    crashCollector:
+      disable: false
+    disruptionManagement:
+      managePodBudgets: true
+      osdMaintenanceTimeout: 30
+      pgHealthCheckTimeout: 0
+    logCollector:
+      enabled: true
+      periodicity: daily
+      maxLogSize: 500M
+    storage:
+      useAllNodes: true
+      useAllDevices: true
+      # deviceFilter: "^sd[b-z]"
+      config:
+        osdsPerDevice: "1"
+        encryptedDevice: "true"
+    cleanupPolicy:
+      confirmation: ""
+      sanitizeDisks:
+        method: quick
+        dataSource: zero
+        iteration: 1
+      allowUninstallWithVolumes: false
+
+    placement:
+      all:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: cluster.ocs.openshift.io/openshift-storage
+                    operator: In
+                    values:
+                      - ""

@@ -1,0 +1,5 @@
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  # - job.yaml  # enable for debugging (writes the secret to SECRET_OUT_FILE)

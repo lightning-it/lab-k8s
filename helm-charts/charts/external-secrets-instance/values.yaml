@@ -1,0 +1,13 @@
+---
+css_name: hashicorp-vault
+css_condition_namespaces:
+  - openshift-gitops
+  - cert-manager
+css_secret_id_name: ovhcloud-vault-token
+css_secret_id_namespace: openshift-gitops
+css_ca_bundle: null
+css_vault_server: https://vault
+css_vault_namespace: null
+css_vault_path: stage-2c
+css_hashicorp: true
+css_ovh: false

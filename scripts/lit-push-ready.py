@@ -10,6 +10,7 @@ import os
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -56,16 +57,116 @@ def evidence_path() -> Path:
     return git_dir.resolve() / "lit-push-ready-evidence.json"
 
 
+def open_untracked_regular(name: str, *, purpose: str) -> int:
+    """Open an untracked file without following any path-component symlink."""
+    required_flags = ("O_CLOEXEC", "O_DIRECTORY", "O_NOFOLLOW", "O_NONBLOCK")
+    missing_flags = [
+        flag for flag in required_flags if not isinstance(getattr(os, flag, None), int)
+    ]
+    if missing_flags or os.open not in os.supports_dir_fd:
+        unsupported = ", ".join(missing_flags) or "open(dir_fd=...)"
+        raise RuntimeError(
+            f"{purpose} requires unavailable safe-open capability: {unsupported}"
+        )
+
+    candidate = Path(name)
+    parts = candidate.parts
+    if (
+        candidate.is_absolute()
+        or not parts
+        or any(part in {"", ".", ".."} for part in parts)
+    ):
+        raise RuntimeError(f"{purpose} refused for unsafe untracked path: {name}")
+
+    directory_flags = (
+        os.O_RDONLY
+        | os.O_CLOEXEC
+        | os.O_DIRECTORY
+        | os.O_NOFOLLOW
+    )
+    file_flags = (
+        os.O_RDONLY
+        | os.O_CLOEXEC
+        | os.O_NOFOLLOW
+        | os.O_NONBLOCK
+    )
+    directory_descriptors: list[int] = []
+    descriptor = -1
+    keep_descriptor = False
+    try:
+        current = os.open(ROOT, directory_flags)
+        directory_descriptors.append(current)
+        for component in parts[:-1]:
+            current = os.open(component, directory_flags, dir_fd=current)
+            directory_descriptors.append(current)
+        descriptor = os.open(parts[-1], file_flags, dir_fd=current)
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise RuntimeError(
+                f"{purpose} refused for non-regular untracked path: {name}"
+            )
+        keep_descriptor = True
+        return descriptor
+    except OSError as exc:
+        raise RuntimeError(
+            f"{purpose} could not safely inspect untracked path: {name}"
+        ) from exc
+    finally:
+        if descriptor >= 0 and not keep_descriptor:
+            os.close(descriptor)
+        for directory_descriptor in reversed(directory_descriptors):
+            os.close(directory_descriptor)
+
+
+def untracked_file_hashes(max_bytes: int = 100_000_000) -> dict[str, str]:
+    names = git_output("ls-files", "--others", "--exclude-standard", "-z")
+    hashes: dict[str, str] = {}
+    total = 0
+    root = ROOT.resolve()
+    for name in (entry for entry in names.split("\0") if entry):
+        path = ROOT / name
+        if path.is_symlink():
+            raise RuntimeError(f"Cannot fingerprint untracked symbolic link: {name}")
+        try:
+            resolved = path.resolve()
+            resolved.relative_to(root)
+        except (OSError, ValueError) as exc:
+            raise RuntimeError(
+                f"Cannot fingerprint escaping or unresolvable untracked path: {name}"
+            ) from exc
+        if not resolved.is_file():
+            raise RuntimeError(
+                f"Cannot fingerprint non-regular untracked path: {name}"
+            )
+        digest = hashlib.sha256()
+        descriptor = open_untracked_regular(name, purpose="Fingerprint")
+        try:
+            with os.fdopen(descriptor, "rb") as stream:
+                descriptor = -1
+                while chunk := stream.read(1024 * 1024):
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise RuntimeError(
+                            "Untracked fingerprint input exceeds "
+                            f"{max_bytes} bytes"
+                        )
+                    digest.update(chunk)
+        except OSError as exc:
+            raise RuntimeError(
+                f"Cannot read untracked path for fingerprint: {name}"
+            ) from exc
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+        hashes[name] = digest.hexdigest()
+    return hashes
+
+
 def tree_fingerprint() -> str:
-    untracked = git_output("ls-files", "--others", "--exclude-standard").splitlines()
     payload = {
         "head": git_output("rev-parse", "HEAD").strip(),
         "status": git_output("status", "--porcelain=v1", "--untracked-files=all"),
         "diff": git_output("diff", "--no-ext-diff", "--binary", "HEAD"),
-        "untracked": {
-            path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
-            for path in untracked
-        },
+        "untracked": untracked_file_hashes(),
     }
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
@@ -128,8 +229,17 @@ def execute_checks(config: dict) -> list[dict]:
             raise RuntimeError("each check must be an object")
         name = check.get("name")
         command = check.get("command")
-        if not name or not isinstance(command, list) or not command:
-            raise RuntimeError("each check requires a name and non-empty command array")
+        if (
+            not isinstance(name, str)
+            or not name
+            or not isinstance(command, list)
+            or not command
+            or any(not isinstance(argument, str) for argument in command)
+        ):
+            raise RuntimeError(
+                "each check requires a non-empty string name and "
+                "non-empty command array of strings"
+            )
         started = time.monotonic()
         print(f"==> {name}: {shlex.join(command)}", flush=True)
         result = run(command)
@@ -203,18 +313,24 @@ def untracked_review_text(max_bytes: int = 1_000_000) -> str:
             )
         try:
             path.resolve().relative_to(ROOT.resolve())
-        except ValueError as exc:
+        except (OSError, ValueError) as exc:
             raise RuntimeError(
-                f"Copilot review refused for escaping untracked path: {name}"
+                f"Copilot review refused for unsafe untracked path: {name}"
             ) from exc
         remaining = max_bytes - total
+        descriptor = -1
         try:
-            with path.open("rb") as stream:
+            descriptor = open_untracked_regular(name, purpose="Copilot review")
+            with os.fdopen(descriptor, "rb") as stream:
+                descriptor = -1
                 payload = stream.read(remaining + 1)
         except OSError as exc:
             raise RuntimeError(
                 f"Copilot review could not inspect untracked path: {name}"
             ) from exc
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
         if len(payload) > remaining:
             raise RuntimeError(
                 "Copilot review refused because untracked content exceeds "
@@ -281,24 +397,38 @@ def copilot_review(config: dict) -> dict:
         + diff
     )
     started = time.monotonic()
-    with tempfile.NamedTemporaryFile(mode="w+", encoding="utf-8") as output:
-        result = subprocess.run(
-            [
-                executable,
-                "-p",
-                prompt,
-                "--silent",
-                "--available-tools",
-                "view,grep,glob",
-                "--allow-tool",
-                "read",
-            ],
-            cwd=ROOT,
-            check=False,
-            text=True,
-            stdout=output,
-            stderr=subprocess.STDOUT,
+    raw_timeout = config.get("copilot", {}).get("timeout_seconds", 300)
+    if isinstance(raw_timeout, bool) or not isinstance(raw_timeout, int):
+        raise RuntimeError(
+            "Copilot review timeout must be an integer between 1 and 1800 seconds"
         )
+    timeout_seconds = raw_timeout
+    if timeout_seconds <= 0 or timeout_seconds > 1800:
+        raise RuntimeError("Copilot review timeout must be between 1 and 1800 seconds")
+    with tempfile.NamedTemporaryFile(mode="w+", encoding="utf-8") as output:
+        try:
+            result = subprocess.run(
+                [
+                    executable,
+                    "-p",
+                    prompt,
+                    "--silent",
+                    "--available-tools",
+                    "view,grep,glob",
+                    "--allow-tool",
+                    "read",
+                ],
+                cwd=ROOT,
+                check=False,
+                text=True,
+                stdout=output,
+                stderr=subprocess.STDOUT,
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"Copilot review timed out after {timeout_seconds} seconds"
+            ) from exc
         output.seek(0)
         review = output.read()
     final_line = next((line.strip() for line in reversed(review.splitlines()) if line.strip()), "")

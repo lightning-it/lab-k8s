@@ -1,0 +1,32 @@
+---
+# Using sub-chart helper-operator
+helper-operator:
+  operators:
+    cert-manager:
+      enabled: true
+      syncwave: '0'
+      namespace:
+        name: cert-manager-operator
+        create: true
+      subscription:
+        channel: stable
+        approval: Manual
+        operatorName: cert-manager
+        source: operatorhubio-catalog
+        sourceNamespace: olm
+        csv: cert-manager.v1.16.5
+      operatorgroup:
+        create: true
+        notownnamespace: true
+
+# Using sub-chart helper-status-checker
+helper-status-checker:
+  enabled: true
+  approver: true
+  checks:
+    - operatorName: cert-manager
+      installCSV: cert-manager.v1.16.5
+      namespace:
+        name: cert-manager-operator
+      serviceAccount:
+        name: "sa-cert-manager-operator"
