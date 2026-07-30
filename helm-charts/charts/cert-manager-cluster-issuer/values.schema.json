@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "certificate": {
+      "additionalProperties": true,
+      "properties": {
+        "dnsNames": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "issuerName": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "secretName": {
+          "type": "string"
+        },
+        "syncwave": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "css": {
+      "additionalProperties": true,
+      "properties": {
+        "cloudflareSecretPath": {
+          "type": "string"
+        },
+        "cloudflareSecretProperty": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "vaultSecretPath": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "issuer": {
+      "additionalProperties": true,
+      "properties": {
+        "credentialsNamespace": {
+          "type": "string"
+        },
+        "letsencrypt": {
+          "additionalProperties": true,
+          "properties": {
+            "cloudflare": {
+              "additionalProperties": true,
+              "properties": {
+                "token": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "email": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string"
+            },
+            "server": {
+              "type": "string"
+            },
+            "syncwave": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "vault": {
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "hashicorpVault": {
+              "additionalProperties": true,
+              "properties": {
+                "appRole": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "caBundleSecretRef": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "syncwave": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "namespace": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "server": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": {
+              "type": "string"
+            },
+            "syncwave": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "vaultAppRoleSecret": {
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "secret": {
+          "type": "string"
+        },
+        "syncwave": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "title": "cert-manager-cluster-issuer values",
+  "type": "object"
+}

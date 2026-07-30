@@ -1,5 +1,8 @@
 # lab-k8s
 
+Enterprise Kubernetes, Helm, and GitOps quality requirements are documented in
+[KUBERNETES_QUALITY.md](KUBERNETES_QUALITY.md).
+
 <!-- BEGIN LIT_SHARED_RELEASE_MODEL -->
 
 ## Release and Quality Model

@@ -1,0 +1,329 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "dashboardIngress": {
+      "additionalProperties": true,
+      "properties": {
+        "tlsSecretName": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "global": {
+      "additionalProperties": true,
+      "properties": {
+        "baseDomain": {
+          "type": "string"
+        },
+        "envName": {
+          "type": "string"
+        },
+        "ingressSuffix": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "rook-ceph-cluster": {
+      "additionalProperties": true,
+      "properties": {
+        "cephClusterSpec": {
+          "additionalProperties": true,
+          "properties": {
+            "cleanupPolicy": {
+              "additionalProperties": true,
+              "properties": {
+                "allowUninstallWithVolumes": {
+                  "type": "boolean"
+                },
+                "confirmation": {
+                  "type": "string"
+                },
+                "sanitizeDisks": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "dataSource": {
+                      "type": "string"
+                    },
+                    "iteration": {
+                      "type": "integer"
+                    },
+                    "method": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "crashCollector": {
+              "additionalProperties": true,
+              "properties": {
+                "disable": {
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            },
+            "disruptionManagement": {
+              "additionalProperties": true,
+              "properties": {
+                "managePodBudgets": {
+                  "type": "boolean"
+                },
+                "osdMaintenanceTimeout": {
+                  "type": "integer"
+                },
+                "pgHealthCheckTimeout": {
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "logCollector": {
+              "additionalProperties": true,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "maxLogSize": {
+                  "type": "string"
+                },
+                "periodicity": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "monitoring": {
+              "additionalProperties": true,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "exporter": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "perfCountersPrioLimit": {
+                      "type": "integer"
+                    },
+                    "statsPeriodSeconds": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                },
+                "metricsDisabled": {
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            },
+            "network": {
+              "additionalProperties": true,
+              "properties": {
+                "connections": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "compression": {
+                      "additionalProperties": true,
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "encryption": {
+                      "additionalProperties": true,
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "requireMsgr2": {
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "placement": {
+              "additionalProperties": true,
+              "properties": {
+                "all": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "nodeAffinity": {
+                      "additionalProperties": true,
+                      "properties": {
+                        "requiredDuringSchedulingIgnoredDuringExecution": {
+                          "additionalProperties": true,
+                          "properties": {
+                            "nodeSelectorTerms": {
+                              "items": {
+                                "additionalProperties": true,
+                                "properties": {
+                                  "matchExpressions": {
+                                    "items": {
+                                      "additionalProperties": true,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "operator": {
+                                          "type": "string"
+                                        },
+                                        "values": {
+                                          "items": {
+                                            "type": "string"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "type": "object"
+                                    },
+                                    "type": "array"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "storage": {
+              "additionalProperties": true,
+              "properties": {
+                "config": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "encryptedDevice": {
+                      "type": "string"
+                    },
+                    "osdsPerDevice": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "useAllDevices": {
+                  "type": "boolean"
+                },
+                "useAllNodes": {
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "monitoring": {
+          "additionalProperties": true,
+          "properties": {
+            "createPrometheusRules": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "metricsDisabled": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "operatorNamespace": {
+          "type": "string"
+        },
+        "toolbox": {
+          "additionalProperties": true,
+          "properties": {
+            "containerSecurityContext": {
+              "additionalProperties": true,
+              "properties": {
+                "capabilities": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "drop": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                },
+                "runAsGroup": {
+                  "type": "integer"
+                },
+                "runAsNonRoot": {
+                  "type": "boolean"
+                },
+                "runAsUser": {
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "resources": {
+              "additionalProperties": true,
+              "properties": {
+                "limits": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "requests": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "title": "rook-ceph-instance values",
+  "type": "object"
+}

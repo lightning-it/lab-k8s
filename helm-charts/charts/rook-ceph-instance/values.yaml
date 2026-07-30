@@ -14,7 +14,7 @@ rook-ceph-cluster:
   # Installs a debugging toolbox deployment
   toolbox:
     # -- Enable Ceph debugging pod deployment
-    enabled: true
+    enabled: false
     # -- Toolbox container security context
     containerSecurityContext:
       runAsNonRoot: true

@@ -13,9 +13,14 @@ spec:
       labels:
         app: okms-smoke
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: smoke
-          image: example.invalid/okms-secret-fetcher:dev
+          image: example.invalid/okms-secret-fetcher@sha256:0000000000000000000000000000000000000000000000000000000000000000
           securityContext:
             runAsNonRoot: true
             runAsUser: 10001
@@ -24,6 +29,23 @@ spec:
             capabilities:
               drop:
                 - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          readinessProbe:
+            exec:
+              command: ["test", "-x", "/usr/local/bin/kms-get-secret.sh"]
+            initialDelaySeconds: 1
+            periodSeconds: 30
+          livenessProbe:
+            exec:
+              command: ["test", "-x", "/usr/local/bin/kms-get-secret.sh"]
+            initialDelaySeconds: 5
+            periodSeconds: 60
           command: ["sh", "-lc"]
           env:
             - name: OKMS_REST
@@ -61,5 +83,7 @@ spec:
         - name: okms-tls
           secret:
             secretName: okms-client
+            defaultMode: 0400
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 1Mi
