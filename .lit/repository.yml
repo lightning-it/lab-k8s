@@ -22,7 +22,7 @@ release_evidence: false
 heavy_incus_required: false
 openssf_best_practices:
   required: true
-  project_id: null
+  project_id: 13885
   target_level: passing
   exception: null
 readme_badges:
