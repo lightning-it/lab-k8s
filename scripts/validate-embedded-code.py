@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import shutil
 import subprocess
@@ -13,14 +14,23 @@ from pathlib import Path
 
 try:
     import yaml
-except ImportError:  # Local quality runs remain useful without optional CI deps.
-    yaml = None
+except ImportError as error:
+    raise SystemExit(
+        "PyYAML is required for fail-closed embedded YAML validation: "
+        "python3 -m pip install PyYAML==6.0.3"
+    ) from error
 
 SCRIPT = Path(__file__).resolve()
+DISTRIBUTED_ROOT = SCRIPT.parents[1]
+SHARED_ROOT = SCRIPT.parents[2]
 ROOT = (
-    SCRIPT.parents[2]
-    if SCRIPT.parent.parent.name == "default"
-    else SCRIPT.parents[1]
+    SHARED_ROOT
+    if DISTRIBUTED_ROOT.name == "default"
+    and (
+        (SHARED_ROOT / ".git").exists()
+        or (SHARED_ROOT / "release-model" / "repositories.yml").is_file()
+    )
+    else DISTRIBUTED_ROOT
 )
 FENCE = re.compile(
     r"^[ \t]*`{3,}[ \t]*(yaml|yml|bash|sh|shell|ansible)\b[^\r\n]*\r?\n"
@@ -28,6 +38,19 @@ FENCE = re.compile(
     re.IGNORECASE | re.MULTILINE | re.DOTALL,
 )
 VALIDATOR_TIMEOUT_SECONDS = 60
+
+
+def validator_candidate(
+    temporary: Path,
+    kind: str,
+    markdown_path: str,
+    fence_index: int,
+    suffix: str,
+) -> Path:
+    path_digest = hashlib.sha256(
+        markdown_path.encode("utf-8", errors="surrogateescape")
+    ).hexdigest()[:12]
+    return temporary / f"{kind}-{path_digest}-{fence_index}.{suffix}"
 
 
 def main() -> int:
@@ -62,15 +85,18 @@ def main() -> int:
                 language = language.lower()
                 label = f"{name}:fence-{index}"
                 if language in {"yaml", "yml", "ansible"}:
-                    if yaml is None:
-                        print(f"PyYAML unavailable; skipped YAML parse for {label}")
-                    else:
-                        try:
-                            yaml.safe_load(content)
-                        except yaml.YAMLError as error:
-                            failures.append(f"{label}: invalid YAML: {error}")
+                    try:
+                        yaml.safe_load(content)
+                    except yaml.YAMLError as error:
+                        failures.append(f"{label}: invalid YAML: {error}")
                     if language == "ansible" and shutil.which("ansible-lint"):
-                        candidate = temp / f"ansible-{index}.yml"
+                        candidate = validator_candidate(
+                            temp,
+                            "ansible",
+                            name,
+                            index,
+                            "yml",
+                        )
                         candidate.write_text(content, encoding="utf-8")
                         try:
                             result = subprocess.run(
@@ -95,7 +121,13 @@ def main() -> int:
                                 f"{label}: ansible-lint failed\n{details}".rstrip()
                             )
                 elif shutil.which("shellcheck"):
-                    candidate = temp / f"shell-{index}.sh"
+                    candidate = validator_candidate(
+                        temp,
+                        "shell",
+                        name,
+                        index,
+                        "sh",
+                    )
                     interpreter = "bash" if language == "bash" else "sh"
                     candidate.write_text(
                         f"#!/usr/bin/env {interpreter}\n" + content,

@@ -7,16 +7,25 @@
     ":semanticCommitType(chore)",
     ":semanticCommitScope(deps)"
   ],
-  "renovate-config": {
-    "enabled": false
-  },
-  "labels": ["dependencies", "renovate"],
-  "baseBranchPatterns": ["develop"],
+  "labels": [
+    "dependencies",
+    "renovate"
+  ],
+  "baseBranchPatterns": [
+    "develop"
+  ],
   "timezone": "UTC",
   "schedule": [],
   "rebaseWhen": "behind-base-branch",
   "prConcurrentLimit": 5,
   "packageRules": [
+    {
+      "description": "Do not update Renovate configuration presets as dependencies",
+      "matchManagers": [
+        "renovate-config"
+      ],
+      "enabled": false
+    },
     {
       "description": "Automerge safe non-major updates into develop after CI passes",
       "matchUpdateTypes": [
@@ -27,40 +36,57 @@
         "pinDigest",
         "lockFileMaintenance"
       ],
-      "addLabels": ["safe-automerge"],
+      "addLabels": [
+        "safe-automerge"
+      ],
       "automerge": true,
       "automergeType": "pr"
     },
     {
       "description": "Require manual approval for major updates",
-      "matchUpdateTypes": ["major"],
-      "addLabels": ["breaking-update"],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "addLabels": [
+        "breaking-update"
+      ],
       "automerge": false,
       "dependencyDashboardApproval": true
     },
     {
       "description": "Keep every component of the GitHub Actions toolchain on one version",
-      "matchManagers": ["github-actions"],
+      "matchManagers": [
+        "github-actions"
+      ],
       "groupName": "github-actions"
     },
     {
       "description": "Keep collection validation on its tested Python runtime",
-      "matchManagers": ["github-actions"],
-      "matchFileNames": [".github/workflows/collection-quality-profile.yml"],
-      "matchDepNames": ["python"],
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchFileNames": [
+        ".github/workflows/collection-quality-profile.yml"
+      ],
+      "matchDepNames": [
+        "python"
+      ],
       "allowedVersions": "/^3\\.11(?:\\.\\d+)?$/",
       "groupName": "python 3.11 lockfile runtimes"
     },
     {
-      "description": "Keep acceptance and repository checks aligned with their lockfiles",
-      "matchManagers": ["github-actions"],
-      "matchFileNames": [
-        ".github/workflows/repository-quality.yml",
-        ".github/workflows/workbench-public-acceptance.yml"
+      "description": "Keep repository checks aligned with their lockfile",
+      "matchManagers": [
+        "github-actions"
       ],
-      "matchDepNames": ["python"],
-      "allowedVersions": "/^3\\.13(?:\\.\\d+)?$/",
-      "groupName": "python 3.13 lockfile runtimes"
+      "matchFileNames": [
+        ".github/workflows/repository-quality.yml"
+      ],
+      "matchDepNames": [
+        "python"
+      ],
+      "allowedVersions": "/^3\\.14(?:\\.\\d+)?$/",
+      "groupName": "python 3.14 lockfile runtimes"
     }
   ]
 }
