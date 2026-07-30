@@ -90,10 +90,23 @@ def pod_spec(resource: dict[str, Any]) -> dict[str, Any] | None:
     if not isinstance(spec, dict) or kind not in WORKLOAD_KINDS:
         return None
     if kind == "CronJob":
-        spec = spec.get("jobTemplate", {}).get("spec", {})
+        job_template = spec.get("jobTemplate")
+        if not isinstance(job_template, dict):
+            return {}
+        spec = job_template.get("spec")
+        if not isinstance(spec, dict):
+            return {}
     if kind in {"CronJob", "Job"}:
-        return spec.get("template", {}).get("spec")
-    return spec.get("template", {}).get("spec")
+        template = spec.get("template")
+        if not isinstance(template, dict):
+            return {}
+        pod = template.get("spec")
+        return pod if isinstance(pod, dict) else {}
+    template = spec.get("template")
+    if not isinstance(template, dict):
+        return {}
+    pod = template.get("spec")
+    return pod if isinstance(pod, dict) else {}
 
 
 def validate_metadata(source: str, resource: dict[str, Any]) -> list[str]:
@@ -127,7 +140,12 @@ def validate_container(source: str, container: dict[str, Any]) -> list[str]:
         for key, value in expected.items():
             if security.get(key) is not value:
                 errors.append(f"{location}: securityContext.{key} must be {value}")
-        drop = security.get("capabilities", {}).get("drop", [])
+        capabilities = security.get("capabilities")
+        if not isinstance(capabilities, dict):
+            capabilities = {}
+        drop = capabilities.get("drop", [])
+        if not isinstance(drop, list):
+            drop = []
         if "ALL" not in drop:
             errors.append(f"{location}: all Linux capabilities must be dropped")
 
@@ -153,7 +171,7 @@ def validate_workload(source: str, resource: dict[str, Any]) -> list[str]:
     if spec is None:
         return []
     errors: list[str] = []
-    if not isinstance(spec, dict):
+    if not isinstance(spec, dict) or not spec:
         return [f"{source}: pod spec is required"]
     if (
         spec.get("automountServiceAccountToken") is not False
@@ -169,7 +187,10 @@ def validate_workload(source: str, resource: dict[str, Any]) -> list[str]:
     else:
         if pod_security.get("runAsNonRoot") is not True:
             errors.append(f"{source}: pod securityContext.runAsNonRoot must be true")
-        if pod_security.get("seccompProfile", {}).get("type") != "RuntimeDefault":
+        seccomp = pod_security.get("seccompProfile")
+        if not isinstance(seccomp, dict):
+            seccomp = {}
+        if seccomp.get("type") != "RuntimeDefault":
             errors.append(f"{source}: pod seccompProfile.type must be RuntimeDefault")
 
     containers: list[dict[str, Any]] = []
@@ -240,7 +261,13 @@ def validate_secret(source: str, resource: dict[str, Any]) -> list[str]:
 def validate_argocd(source: str, resource: dict[str, Any]) -> list[str]:
     if resource.get("kind") != "Application":
         return []
-    revision = resource.get("spec", {}).get("source", {}).get("targetRevision")
+    spec = resource.get("spec")
+    source_spec = spec.get("source") if isinstance(spec, dict) else None
+    revision = (
+        source_spec.get("targetRevision")
+        if isinstance(source_spec, dict)
+        else None
+    )
     if (
         revision != "<YOUR_TARGET_REVISION>"
         and not (isinstance(revision, str) and SHA_REVISION.fullmatch(revision))

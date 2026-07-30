@@ -9,7 +9,8 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "validate-kubernetes-policy.py"
 SPEC = importlib.util.spec_from_file_location("kubernetes_policy", SCRIPT)
-assert SPEC and SPEC.loader
+if SPEC is None or SPEC.loader is None:
+    raise RuntimeError(f"unable to load Kubernetes policy module from {SCRIPT}")
 POLICY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(POLICY)
 
@@ -100,6 +101,24 @@ class KubernetesPolicyTests(unittest.TestCase):
         }
         errors = POLICY.validate([("fixture", application)])
         self.assertTrue(any("targetRevision" in error for error in errors))
+
+    def test_malformed_nested_objects_fail_without_crashing(self) -> None:
+        resource = secure_deployment()
+        pod = resource["spec"]["template"]["spec"]
+        pod["securityContext"]["seccompProfile"] = "invalid"
+        pod["containers"][0]["securityContext"]["capabilities"] = ["invalid"]
+        errors = POLICY.validate([("fixture", resource)])
+        self.assertTrue(any("seccompProfile" in error for error in errors))
+        self.assertTrue(any("capabilities" in error for error in errors))
+
+        malformed_job = {
+            "apiVersion": "batch/v1",
+            "kind": "Job",
+            "metadata": {"name": "malformed"},
+            "spec": {"template": "invalid"},
+        }
+        errors = POLICY.validate([("fixture", malformed_job)])
+        self.assertTrue(any("pod spec is required" in error for error in errors))
 
 
 if __name__ == "__main__":
