@@ -46,3 +46,14 @@ Heavy Incus execution is not required for this repository. Do not report an Incu
 The GitHub Actions matrix is the primary dashboard. Job names should expose the repository class, OS/runtime where applicable, and profile, for example `repository / quality`.
 
 Release evidence is generated during trusted release workflows and attached to or linked from GitHub Releases where the repository publishes release artifacts.
+
+## OpenSSF Enrollment Promotion Evidence
+
+The protected ancestry backmerge joins:
+
+- reviewed `develop` source `5f0fbcc66c997fe4bfb73ef38069f4a3890553b3`, which records OpenSSF Best Practices project `13885`.
+- protected `main` source `cc181724a4a2bb851de7f5b5bd65e0ee3bb47ae9`.
+
+The resulting two-parent commit preserves the `develop` tree while making the
+current protected `main` history an ancestor. Promotion must still pass the
+repository-specific Kubernetes quality gate and current-revision Copilot review.
