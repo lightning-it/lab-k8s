@@ -1,0 +1,11 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: okms-secret-fetcher-demo
+  namespace: okms
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: fetch-okms-secret
+          image: example.invalid/okms-secret-fetcher:dev

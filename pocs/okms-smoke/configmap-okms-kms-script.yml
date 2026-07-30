@@ -1,0 +1,304 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: okms-kms-script
+  namespace: okms
+data:
+  kms-get-secret.sh: |
+    #!/usr/bin/env bash
+    # kms-get-secret.sh (v9) - fixes Secret Manager 404 + prints a specific key
+    #
+    # Usage:
+    #   bash kms-get-secret.sh --cert <cert.pem> --key <key.pem>
+    #
+    # Env overrides:
+    #   SECRET_UPN="urn:.../secret/poc%2Fvpn"
+    #   SECRET_KV_KEY="shared-key"
+
+    set -euo pipefail
+
+    OKMS_REST="${OKMS_REST:-https://eu-west-lim.okms.ovh.net}"
+    OKMS_KMIP="${OKMS_KMIP:-eu-west-lim.okms.ovh.net:5696}"
+    OKMS_ID="${OKMS_ID:-}"
+
+    ACCESS_CERT_ID="${ACCESS_CERT_ID:-}"
+    ACCESS_CERT_NAME="${ACCESS_CERT_NAME:-}"
+
+    KEY_ID="${KEY_ID:-}"
+
+    SECRET_UPN="${SECRET_UPN:-}"
+    SECRET_KV_KEY="${SECRET_KV_KEY:-shared-key}"
+
+    PLAINTEXT="${PLAINTEXT:-My secret data}"
+    CONTEXT="${CONTEXT:-k8s-okms-smoketest}"
+
+    CERT_PATH="${CERT_PATH:-}"
+    KEY_PATH="${KEY_PATH:-}"
+
+    SKIP_KMIP="${SKIP_KMIP:-0}"
+    SKIP_KMS="${SKIP_KMS:-0}"
+    SKIP_SECRET="${SKIP_SECRET:-0}"
+
+    CURL_HTTP_CODE="000"
+
+    log()  { printf "\n[+] %s\n" "$*"; }
+    warn() { printf "\n[!] %s\n" "$*" >&2; }
+    die()  { printf "\n[✗] %s\n" "$*" >&2; exit 1; }
+
+    have_cmd() { command -v "$1" >/dev/null 2>&1; }
+    require_cmd() { have_cmd "$1" || die "Missing required command: $1"; }
+
+    b64enc() { if base64 -w0 </dev/null >/dev/null 2>&1; then base64 -w0; else base64 | tr -d '\n'; fi; }
+    b64dec() { if echo "Zg==" | base64 -d >/dev/null 2>&1; then base64 -d; else base64 -D; fi; }
+
+    url_decode() {
+      local s="$1"
+      if have_cmd python3; then
+        python3 - <<'PY' "$s"
+    import sys, urllib.parse
+    print(urllib.parse.unquote(sys.argv[1]))
+    PY
+      else
+        printf '%b' "${s//%/\\x}"
+      fi
+    }
+
+    parse_secret_upn() {
+      # outputs 2 lines:
+      #   1: okmsId
+      #   2: encoded secret path (e.g. poc%2Fvpn)
+      local upn="$1"
+      local tmp okms_id enc_path
+      tmp="${upn#*okms:}"
+      okms_id="${tmp%%/secret/*}"
+      enc_path="${tmp#*/secret/}"
+      [[ -n "$okms_id" ]] || die "Could not parse okmsId from SECRET_UPN"
+      [[ -n "$enc_path" ]] || die "Could not parse secret path from SECRET_UPN"
+      printf "%s\n%s\n" "$okms_id" "$enc_path"
+    }
+
+    tcp_check() {
+      local host="$1" port="$2"
+      if have_cmd nc; then
+        nc -z -w 5 "$host" "$port" >/dev/null 2>&1
+      else
+        (exec 3<>"/dev/tcp/${host}/${port}") >/dev/null 2>&1
+      fi
+    }
+
+    validate_cert_key_match() {
+      log "Validating certificate and private key match"
+      local cert_pub key_pub
+      cert_pub="$(openssl x509 -in "$CERT_PATH" -pubkey -noout | openssl pkey -pubin -outform DER | openssl dgst -sha256 | awk '{print $2}')"
+      key_pub="$(openssl pkey -in "$KEY_PATH" -pubout | openssl pkey -pubin -outform DER | openssl dgst -sha256 | awk '{print $2}')"
+      [[ "$cert_pub" == "$key_pub" ]] || die "CERT and KEY do NOT match."
+      echo "OK: cert/key match (pubkey sha256=$cert_pub)"
+    }
+
+    print_cert_info() {
+      log "Client certificate info"
+      openssl x509 -in "$CERT_PATH" -noout -subject -issuer -serial -dates | sed 's/^/  /'
+    }
+
+    # No subshell: writes body to file, sets CURL_HTTP_CODE in parent shell
+    curl_mtls_to_file() {
+      local method="$1"; shift
+      local url="$1"; shift
+      local outfile="$1"; shift
+      local data="${1:-}"
+
+      local http_code
+      if [[ "$method" == "GET" ]]; then
+        http_code="$(curl -sS -L --path-as-is \
+          --cert "$CERT_PATH" --key "$KEY_PATH" \
+          -H "Accept: application/json" \
+          -o "$outfile" -w "%{http_code}" \
+          "$url" || true)"
+      else
+        http_code="$(curl -sS -L --path-as-is \
+          --cert "$CERT_PATH" --key "$KEY_PATH" \
+          -H "Accept: application/json" \
+          -H "Content-Type: application/json" \
+          -X "$method" -d "$data" \
+          -o "$outfile" -w "%{http_code}" \
+          "$url" || true)"
+      fi
+      CURL_HTTP_CODE="${http_code:-000}"
+    }
+
+    json_get() {
+      local json="$1"
+      local expr="$2"
+      if have_cmd jq; then
+        printf "%s" "$json" | jq -r "$expr"
+      else
+        die "jq is required for parsing secret value cleanly (install jq)."
+      fi
+    }
+
+    usage() {
+      cat <<EOF
+    Usage:
+      $0 --cert <path> --key <path>
+
+    Optional:
+      --secret-upn <upn>
+      --secret-kv-key <key>   (default: shared-key)
+    EOF
+    }
+
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --cert) CERT_PATH="$2"; shift 2 ;;
+        --key)  KEY_PATH="$2"; shift 2 ;;
+        --secret-upn) SECRET_UPN="$2"; shift 2 ;;
+        --secret-kv-key) SECRET_KV_KEY="$2"; shift 2 ;;
+        -h|--help) usage; exit 0 ;;
+        *) die "Unknown arg: $1 (use --help)" ;;
+      esac
+    done
+
+    [[ -n "${CERT_PATH}" ]] || die "--cert is required"
+    [[ -n "${KEY_PATH}"  ]] || die "--key is required"
+    [[ -r "${CERT_PATH}" ]] || die "Cannot read cert file: $CERT_PATH"
+    [[ -r "${KEY_PATH}"  ]] || die "Cannot read key file:  $KEY_PATH"
+    if [[ "$SKIP_KMS" == "0" ]]; then
+      [[ -n "${KEY_ID}" ]] || die "KEY_ID is required unless SKIP_KMS=1"
+    fi
+    if [[ "$SKIP_SECRET" == "0" ]]; then
+      [[ -n "${SECRET_UPN}" ]] || die "SECRET_UPN is required unless SKIP_SECRET=1"
+    fi
+
+    require_cmd curl
+    require_cmd openssl
+    require_cmd jq
+
+    log "Configuration"
+    cat <<EOF
+    Access Cert ID   : $ACCESS_CERT_ID   (audit only)
+    Access Cert Name : $ACCESS_CERT_NAME (audit only)
+    OKMS_REST        : $OKMS_REST
+    OKMS_KMIP        : $OKMS_KMIP
+    OKMS_ID          : $OKMS_ID
+    KMS keyId        : $KEY_ID
+    SECRET_UPN       : $SECRET_UPN
+    SECRET_KV_KEY    : $SECRET_KV_KEY
+    CERT             : $CERT_PATH
+    KEY              : $KEY_PATH
+    EOF
+
+    print_cert_info
+    validate_cert_key_match
+
+    REST_HOST="${OKMS_REST#https://}"; REST_HOST="${REST_HOST#http://}"; REST_HOST="${REST_HOST%%/*}"
+    KMIP_HOST="${OKMS_KMIP%%:*}"
+    KMIP_PORT="${OKMS_KMIP##*:}"
+
+    # ---- basic connectivity ----
+    log "TCP checks"
+    tcp_check "$REST_HOST" 443 && echo "OK: REST port reachable" || die "REST port not reachable"
+    tcp_check "$KMIP_HOST" "$KMIP_PORT" && echo "OK: KMIP port reachable" || die "KMIP port not reachable"
+
+    # ---- KMS quick smoke (keep as-is) ----
+    if [[ "$SKIP_KMS" == "0" ]]; then
+      log "KMS: encrypt/decrypt smoke test"
+      TMP="$(mktemp)"
+      PLAINTEXT_B64="$(printf %s "$PLAINTEXT" | b64enc)"
+      ENC_PAYLOAD="$(printf '{"plaintext":"%s","context":"%s"}' "$PLAINTEXT_B64" "$CONTEXT")"
+
+      curl_mtls_to_file POST "${OKMS_REST}/v1/servicekey/${KEY_ID}/encrypt" "$TMP" "$ENC_PAYLOAD"
+      ENC_BODY="$(cat "$TMP")"
+      [[ "$CURL_HTTP_CODE" == "200" ]] || die "KMS encrypt failed (HTTP $CURL_HTTP_CODE): $ENC_BODY"
+      CIPHERTEXT="$(json_get "$ENC_BODY" '.ciphertext')"
+
+      DEC_PAYLOAD="$(printf '{"ciphertext":"%s","context":"%s"}' "$CIPHERTEXT" "$CONTEXT")"
+      curl_mtls_to_file POST "${OKMS_REST}/v1/servicekey/${KEY_ID}/decrypt" "$TMP" "$DEC_PAYLOAD"
+      DEC_BODY="$(cat "$TMP")"
+      [[ "$CURL_HTTP_CODE" == "200" ]] || die "KMS decrypt failed (HTTP $CURL_HTTP_CODE): $DEC_BODY"
+      OUT_B64="$(json_get "$DEC_BODY" '.plaintext')"
+      OUT="$(printf %s "$OUT_B64" | b64dec)"
+      echo "OK: decrypted plaintext: $OUT"
+      rm -f "$TMP"
+    fi
+
+    # ---- Secret Manager: FIX 404 + print shared-key ----
+    if [[ "$SKIP_SECRET" == "0" ]]; then
+      log "Secret Manager: fetch secret value (⚠️ prints secret value)"
+
+      SECRET_OKMS_ID=""; SECRET_ENC_PATH=""
+      i=0
+      while IFS= read -r line; do
+        i=$((i+1))
+        if [[ $i -eq 1 ]]; then SECRET_OKMS_ID="$line"; fi
+        if [[ $i -eq 2 ]]; then SECRET_ENC_PATH="$line"; fi
+      done < <(parse_secret_upn "$SECRET_UPN")
+
+      [[ -n "$SECRET_OKMS_ID" ]] || die "Failed to parse okmsId from SECRET_UPN"
+      [[ -n "$SECRET_ENC_PATH" ]] || die "Failed to parse encoded path from SECRET_UPN"
+
+      SECRET_PATH_DECODED="$(url_decode "$SECRET_ENC_PATH")"
+
+      echo "Parsed okmsId        : $SECRET_OKMS_ID"
+      echo "Parsed path (encoded): $SECRET_ENC_PATH"
+      echo "Parsed path (decoded): $SECRET_PATH_DECODED"
+
+      TMP="$(mktemp)"
+      FOUND_URL=""
+
+      # IMPORTANT: try encoded form FIRST (matches your URN: poc%2Fvpn)
+      CANDIDATES=(
+        "${OKMS_REST}/api/${SECRET_OKMS_ID}/v1/secret/data/${SECRET_ENC_PATH}"   # KV2 read (encoded)
+        "${OKMS_REST}/api/${SECRET_OKMS_ID}/v2/secret/${SECRET_ENC_PATH}"       # REST read (encoded)
+        "${OKMS_REST}/api/${SECRET_OKMS_ID}/v2/secret/${SECRET_ENC_PATH}?includeData=true"
+        "${OKMS_REST}/api/${SECRET_OKMS_ID}/v2/secret/${SECRET_ENC_PATH}?include_data=true"
+
+        # fallback: decoded path with slashes
+        "${OKMS_REST}/api/${SECRET_OKMS_ID}/v1/secret/data/${SECRET_PATH_DECODED}"
+        "${OKMS_REST}/api/${SECRET_OKMS_ID}/v2/secret/${SECRET_PATH_DECODED}"
+        "${OKMS_REST}/api/${SECRET_OKMS_ID}/v2/secret/${SECRET_PATH_DECODED}?includeData=true"
+        "${OKMS_REST}/api/${SECRET_OKMS_ID}/v2/secret/${SECRET_PATH_DECODED}?include_data=true"
+      )
+
+      BODY=""
+      for u in "${CANDIDATES[@]}"; do
+        log "GET $u"
+        : > "$TMP"
+        curl_mtls_to_file GET "$u" "$TMP"
+        BODY="$(cat "$TMP")"
+        echo "    -> HTTP $CURL_HTTP_CODE"
+        if [[ "$CURL_HTTP_CODE" == "200" ]]; then
+          FOUND_URL="$u"
+          break
+        fi
+      done
+
+      if [[ -z "$FOUND_URL" ]]; then
+        rm -f "$TMP"
+        die "Secret fetch failed (no 200). Last HTTP=$CURL_HTTP_CODE.
+
+    Most common causes:
+    - IAM policy missing the secret data permission (for example, okms:apikms:secret/version/getData).
+    - Secret path mismatch (double-check the URN path encoding)."
+      fi
+
+      echo ""
+      echo "----- SECRET VALUE (from $FOUND_URL) -----"
+
+      # Try common shapes:
+      # - KV2:   .data.data["shared-key"]
+      # - REST:  .version.data["shared-key"]
+      VAL="$(printf "%s" "$BODY" | jq -r --arg k "$SECRET_KV_KEY" '
+          (.data.data[$k] // .version.data[$k] // empty)
+        ')"
+
+      if [[ -n "$VAL" && "$VAL" != "null" ]]; then
+        echo "$VAL"
+      else
+        die "Could not locate key '$SECRET_KV_KEY' in expected JSON fields (.data.data or .version.data)."
+      fi
+
+      rm -f "$TMP"
+    fi
+
+    log "Done ✅"

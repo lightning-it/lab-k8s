@@ -1,0 +1,25 @@
+{{/*
+Configure a Namespace to be bound to a specific node.
+
+Example for values files:
+      bindtoNode:
+        role: infra  # mandatory
+        operator: "Equal" # optional, default Equal
+        effect: "NoSchedule" # optional, default NoSchedule
+        value: "reserved" # optional, default reserved
+     
+{{ include "tpl.bindtoNode" . -}}
+*/}}
+{{- define "tpl.bindtoNode" -}}
+openshift.io/node-selector: node-role.kubernetes.io/{{ .role }}=
+scheduler.alpha.kubernetes.io/defaultTolerations: >-
+  [{"operator": "{{ .operator | default "Equal" }}", "effect": "{{ .effect | default "NoSchedule" }}", "key":"node-role.kubernetes.io/{{ .role }}", "value": "{{ .value | default "reserved" }}"}]
+{{- end }}
+
+{{- define "tpl.namespaceDescr" -}}
+openshift.io/description: {{ . | default "" | quote }}
+{{- end }}
+
+{{- define "tpl.namespaceDisplay" -}}
+openshift.io/display-name: {{ . | default "" | quote }}
+{{- end }}

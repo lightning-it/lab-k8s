@@ -1,0 +1,26 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rook-ceph-dashboard
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: rook-ceph.{{ include "global.appsDomain" . }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rook-ceph-mgr-dashboard
+                port:
+                  name: https-dashboard
+  tls:
+    - hosts:
+        - rook-ceph.{{ include "global.appsDomain" . }}
+      secretName: {{ required "dashboardIngress.tlsSecretName is required" .Values.dashboardIngress.tlsSecretName | quote }}

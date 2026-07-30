@@ -1,0 +1,34 @@
+---
+name: main
+repository: ghcr.io/external-secrets/external-secrets
+# Using sub-chart helper-operator
+helper-operator:
+  operators:
+    external-secrets-operator:
+      enabled: true
+      syncwave: '0'
+      namespace:
+        name: external-secrets-operator
+        create: true
+      subscription:
+        channel: alpha
+        approval: Manual
+        operatorName: external-secrets-operator
+        source: operatorhubio-catalog
+        sourceNamespace: olm
+        csv: external-secrets-operator.v0.11.0
+      operatorgroup:
+        create: true
+        notownnamespace: false
+
+# Using sub-chart helper-status-checker
+helper-status-checker:
+  enabled: true
+  approver: true
+  checks:
+    - operatorName: external-secrets-operator
+      installCSV: external-secrets-operator.v0.11.0
+      namespace:
+        name: external-secrets-operator
+      serviceAccount:
+        name: "sa-external-secrets-operator"

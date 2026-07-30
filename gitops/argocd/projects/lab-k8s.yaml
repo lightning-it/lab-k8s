@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: lab-k8s
+  namespace: argocd
+spec:
+  description: "lab-k8s GitOps Project"
+  sourceRepos:
+    - "<YOUR_REPO_URL>"
+  destinations:
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+    - namespace: okms
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace

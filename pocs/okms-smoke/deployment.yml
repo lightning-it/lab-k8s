@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: okms-smoke
+  namespace: okms
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: okms-smoke
+  template:
+    metadata:
+      labels:
+        app: okms-smoke
+    spec:
+      containers:
+        - name: smoke
+          image: example.invalid/okms-secret-fetcher:dev
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command: ["sh", "-lc"]
+          env:
+            - name: OKMS_REST
+              value: "https://eu-west-lim.okms.ovh.net"
+            - name: SECRET_UPN
+              value: "<SET_PER_ENVIRONMENT>"
+            - name: SECRET_KV_KEY
+              value: "shared-key"
+            - name: CERT_PATH
+              value: "/etc/okms/tls/tls.crt"
+            - name: KEY_PATH
+              value: "/etc/okms/tls/tls.key"
+            - name: SECRET_OUT_FILE
+              value: "/tmp/okms-secret-value"
+          volumeMounts:
+            - name: okms-tls
+              mountPath: /etc/okms/tls
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          args:
+            - |
+              set -e
+              while true; do
+                echo "[okms-smoke] $(date -u '+%Y-%m-%dT%H:%M:%SZ') fetching secret..."
+                /usr/local/bin/kms-get-secret.sh \
+                  --cert "$CERT_PATH" \
+                  --key "$KEY_PATH"
+                test -s "$SECRET_OUT_FILE"
+                rm -f "$SECRET_OUT_FILE"
+                echo "[okms-smoke] secret fetch succeeded"
+                sleep 60
+              done
+      volumes:
+        - name: okms-tls
+          secret:
+            secretName: okms-client
+        - name: tmp
+          emptyDir: {}
