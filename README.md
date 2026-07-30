@@ -35,6 +35,7 @@ Publishing targets: `none`.
 
 [![CI](https://github.com/lightning-it/lab-k8s/actions/workflows/repository-quality.yml/badge.svg?branch=develop)](https://github.com/lightning-it/lab-k8s/actions/workflows/repository-quality.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lightning-it/lab-k8s/badge)](https://scorecard.dev/viewer/?uri=github.com/lightning-it/lab-k8s)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13885/badge)](https://www.bestpractices.dev/projects/13885)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 <!-- END LIT_QUALITY_BADGES -->
