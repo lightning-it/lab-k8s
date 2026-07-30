@@ -1,0 +1,38 @@
+---
+version: 1
+waivers:
+  - finding: "helm:helm-charts/charts/rook-ceph-operator#120: container manager: image must use an immutable sha256 digest"
+    owner: platform-engineering
+    reason: The pinned upstream CSI controller-manager chart does not expose digest-form image configuration.
+    compensating_control: The dependency archive and Chart.lock digest are committed, Renovate-managed, and reviewed before promotion.
+    expires: 2026-10-31
+  - finding: "helm:helm-charts/charts/rook-ceph-operator#120: container manager: securityContext.runAsNonRoot must be True"
+    owner: platform-engineering
+    reason: The pinned upstream CSI controller-manager requires startup identity behavior not exposed as a supported chart override.
+    compensating_control: The namespace enforces the platform Pod Security profile and the dependency remains version-locked.
+    expires: 2026-10-31
+  - finding: "helm:helm-charts/charts/rook-ceph-operator#120: pod seccompProfile.type must be RuntimeDefault"
+    owner: platform-engineering
+    reason: The pinned upstream CSI controller-manager does not expose a pod-level seccomp override.
+    compensating_control: The namespace enforces the platform Pod Security profile and the dependency remains version-locked.
+    expires: 2026-10-31
+  - finding: "helm:helm-charts/charts/rook-ceph-operator#121: container rook-ceph-operator: image must use an immutable sha256 digest"
+    owner: platform-engineering
+    reason: The pinned upstream Rook chart accepts a version tag but does not expose a digest-form image contract.
+    compensating_control: The dependency archive and Chart.lock digest are committed, Renovate-managed, and reviewed before promotion.
+    expires: 2026-10-31
+  - finding: "helm:helm-charts/charts/rook-ceph-operator#121: container rook-ceph-operator: livenessProbe is required"
+    owner: platform-engineering
+    reason: The pinned upstream Rook chart exposes no stable liveness probe contract for the operator.
+    compensating_control: Kubernetes deployment availability and reconciliation health are monitored by the platform.
+    expires: 2026-10-31
+  - finding: "helm:helm-charts/charts/rook-ceph-operator#121: container rook-ceph-operator: readinessProbe is required"
+    owner: platform-engineering
+    reason: The pinned upstream Rook chart exposes no stable readiness probe contract for the operator.
+    compensating_control: Kubernetes deployment availability and reconciliation health are monitored by the platform.
+    expires: 2026-10-31
+  - finding: "helm:helm-charts/charts/rook-ceph-operator#121: pod securityContext is required"
+    owner: platform-engineering
+    reason: The pinned upstream Rook chart applies the supported hardening at container level but has no pod-level security-context override.
+    compensating_control: The operator uses an explicit non-root UID/GID, drops all capabilities, and runs under the namespace Pod Security profile.
+    expires: 2026-10-31

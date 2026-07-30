@@ -15,19 +15,26 @@ spec:
       labels:
         app: okms-secret-fetcher-demo
     spec:
+      automountServiceAccountToken: false
       securityContext:
         fsGroup: 10001
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       volumes:
         - name: okms-tls
           secret:
             secretName: okms-client
+            defaultMode: 0400
         - name: secret-out
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 1Mi
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 1Mi
       initContainers:
         - name: fetch-okms-secret
-          image: example.invalid/okms-secret-fetcher:dev
+          image: example.invalid/okms-secret-fetcher@sha256:0000000000000000000000000000000000000000000000000000000000000000
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsNonRoot: true
@@ -37,6 +44,13 @@ spec:
             capabilities:
               drop:
                 - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
           envFrom:
             - configMapRef:
                 name: okms-secret-fetcher-config
@@ -51,7 +65,7 @@ spec:
               mountPath: /tmp
       containers:
         - name: app
-          image: alpine:3.20
+          image: docker.io/library/alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsNonRoot: true
@@ -61,6 +75,23 @@ spec:
             capabilities:
               drop:
                 - ALL
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "test -s /work/shared-key.txt"]
+            initialDelaySeconds: 1
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "test -s /work/shared-key.txt"]
+            initialDelaySeconds: 5
+            periodSeconds: 30
           command: ["/bin/sh", "-lc"]
           args:
             - |

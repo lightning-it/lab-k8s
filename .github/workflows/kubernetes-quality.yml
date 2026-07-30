@@ -1,0 +1,57 @@
+# yamllint disable rule:truthy
+---
+name: Kubernetes Quality
+
+on:
+  push:
+    branches: ["develop", "main"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: kubernetes / quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: v3.21.3
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
+        with:
+          version: v1.35.0
+
+      - name: Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+
+      - name: Install policy dependencies
+        run: >-
+          python3 -m pip install
+          --disable-pip-version-check
+          --no-input
+          --require-hashes
+          --requirement .github/requirements/repository-quality.lock
+
+      - name: Verify deterministic Helm values schemas
+        run: python3 scripts/generate-helm-values-schemas.py --check
+
+      - name: Lint and render embedded Helm charts
+        run: bash scripts/validate-embedded-helm.sh
+
+      - name: Test Kubernetes policy enforcement
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Build Kustomize overlays and enforce policy
+        run: python3 scripts/validate-kubernetes-policy.py

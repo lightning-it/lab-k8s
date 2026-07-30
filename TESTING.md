@@ -33,7 +33,16 @@ Run the managed repository-policy checks:
 python3 -m venv .venv
 .venv/bin/python -m pip install PyYAML==6.0.3
 .venv/bin/python scripts/lit-repository-quality.py
+python3 scripts/generate-helm-values-schemas.py --check
+bash scripts/validate-embedded-helm.sh
+python3 -m unittest discover -s tests -v
+python3 scripts/validate-kubernetes-policy.py
 ```
+
+The last command requires `helm` and `kubectl`; it builds Kustomize overlays
+offline and validates all rendered Kubernetes, Helm, GitOps, and PoC resources.
+See [KUBERNETES_QUALITY.md](KUBERNETES_QUALITY.md) for the enforced contract and
+standards.
 
 Run the repository-specific commands declared in
 `.lit/push-ready.json` and the required CI workflow named in

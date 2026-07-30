@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "helper-operator": {
+      "additionalProperties": true,
+      "properties": {
+        "operators": {
+          "additionalProperties": true,
+          "properties": {
+            "cert-manager": {
+              "additionalProperties": true,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "namespace": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "create": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "operatorgroup": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "create": {
+                      "type": "boolean"
+                    },
+                    "notownnamespace": {
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                },
+                "subscription": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "approval": {
+                      "type": "string"
+                    },
+                    "channel": {
+                      "type": "string"
+                    },
+                    "csv": {
+                      "type": "string"
+                    },
+                    "operatorName": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "sourceNamespace": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "syncwave": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "helper-status-checker": {
+      "additionalProperties": true,
+      "properties": {
+        "approver": {
+          "type": "boolean"
+        },
+        "checks": {
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "installCSV": {
+                "type": "string"
+              },
+              "namespace": {
+                "additionalProperties": true,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "operatorName": {
+                "type": "string"
+              },
+              "serviceAccount": {
+                "additionalProperties": true,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "title": "cert-manager-operator values",
+  "type": "object"
+}

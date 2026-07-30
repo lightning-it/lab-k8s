@@ -8,4 +8,4 @@ spec:
     spec:
       initContainers:
         - name: fetch-okms-secret
-          image: example.invalid/okms-secret-fetcher:prod
+          image: example.invalid/okms-secret-fetcher@sha256:0000000000000000000000000000000000000000000000000000000000000000

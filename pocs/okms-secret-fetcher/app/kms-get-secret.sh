@@ -81,9 +81,11 @@ candidates=(
 body=""
 code=""
 found_url=""
+endpoint_number=0
 
 for u in "${candidates[@]}"; do
-  log "GET $u"
+  endpoint_number=$((endpoint_number + 1))
+  log "Trying OKMS endpoint variant $endpoint_number"
   # capture http code + body without failing the script on non-2xx
   body_file="$(mktemp)"
   code="$(curl -sS -L --path-as-is --cert "$CERT_PATH" --key "$KEY_PATH"         -H "Accept: application/json"         -o "$body_file" -w "%{http_code}"         "$u" || true)"
@@ -104,7 +106,7 @@ done
 val="$(printf "%s" "$body" | jq -r --arg k "$SECRET_KV_KEY" '(.data.data[$k] // .version.data[$k] // empty)')"
 
 if [[ -z "$val" || "$val" == "null" ]]; then
-  die "Could not find key '$SECRET_KV_KEY' in response from $found_url"
+  die "Requested key was not present in the successful OKMS response"
 fi
 
 umask 077
