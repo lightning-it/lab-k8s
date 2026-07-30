@@ -82,12 +82,22 @@ reviewed decision.
 The enterprise alignment is tracked in
 [Engineering ADR issue #51][alignment-issue].
 
+## Implementation Evidence
+
+The reviewed implementation entered `develop` through
+[pull request #73][implementation-pr] at merge commit
+`fc514bbee4845d1a14099e242b67be22ab21bf59`. Its exact revision passed the
+Kubernetes quality gate, repository quality, CodeQL, and the current-revision
+Copilot review gate. Production evidence is recorded only after the protected
+promotion to `main` has passed the same gates.
+
 [alignment-issue]: https://github.com/lightning-it/lab-k8s/issues/51
 [argocd-tracking]: https://argo-cd.readthedocs.io/en/stable/user-guide/tracking_strategies/
 [branch-adr]: https://lit.atlassian.net/wiki/spaces/LIT/pages/2878603438
 [canonical-helm]: https://github.com/lightning-it/helm-charts
 [ci-adr]: https://lit.atlassian.net/wiki/spaces/LIT/pages/2878636340
 [helm-schema]: https://helm.sh/docs/topics/charts/#schema-files
+[implementation-pr]: https://github.com/lightning-it/lab-k8s/pull/73
 [osps-baseline]: https://baseline.openssf.org/
 [pod-security]: https://kubernetes.io/docs/concepts/security/pod-security-standards/
 [probes]: https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/
