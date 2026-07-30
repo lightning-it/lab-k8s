@@ -7,13 +7,13 @@ annotations:
     - kind: added
       description: tpl for sleeptimer that can be used in jobs
     - kind: added
-      description: tpl to set nodeSelector and tolartion annoations for a namespace
+      description: tpl to set nodeSelector and toleration annotations for a namespace
     - kind: added
       description: new TPLs to create matchExpressions and matchLabels blocks
     - kind: added
-      description: new TOLS additionalAnnotations and additionalLabels that allow to set annotations and labels freely on any resource.
+      description: new TPLs additionalAnnotations and additionalLabels that allow to set annotations and labels freely on any resource.
     - kind: added
-      description: nswitched order of tolerations
+      description: switched order of tolerations
     - kind: fixed
       description: fixed issue with newline in tpl.sleeptimer
     - kind: added

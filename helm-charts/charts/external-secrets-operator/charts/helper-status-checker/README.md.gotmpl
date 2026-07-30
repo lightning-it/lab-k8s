@@ -1,6 +1,6 @@
 {{ template "doc.header" . }}
 
-This chart is used the check the installation status of an Operator. 
+This chart is used to check the installation status of an Operator.
 Whenever a new Operator gets installed, this Chart can be called to verify if the status of the Operator is ready.
 This is useful when you want to install an Operator AND configure it in the same Helm Chart. Typically, Argo CD will fail in such case,
 because it would try to configure the CRD that the Operator provides immediately after the Subscription object becomes ready. However,

@@ -9,7 +9,7 @@ helper-operator:
       syncwave: '0'
       namespace:
         name: external-secrets-operator
-        create: false
+        create: true
       subscription:
         channel: alpha
         approval: Manual
