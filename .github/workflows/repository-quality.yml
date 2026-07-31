@@ -11,6 +11,9 @@ on:
 permissions:
   contents: read
 
+env:
+  AUTHORITATIVE_BASE_BRANCH: develop
+
 jobs:
   quality:
     name: repository / quality
@@ -20,41 +23,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          fetch-depth: 0
           persist-credentials: false
 
-      - name: Setup Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: "3.14"
+      - name: Refresh authoritative develop ref
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          auth_header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')"
+          echo "::add-mask::$auth_header"
+          GIT_CONFIG_COUNT=1 \
+          GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+          GIT_CONFIG_VALUE_0="$auth_header" \
+            git fetch --quiet --no-tags origin \
+              "+refs/heads/${AUTHORITATIVE_BASE_BRANCH}:refs/remotes/origin/${AUTHORITATIVE_BASE_BRANCH}"
 
-      - name: Verify Codex and Copilot instruction parity
-        run: python3 scripts/lit-push-ready.py instructions
-
-      - name: Install repository quality dependencies
-        run: >-
-          python3 -m pip install
-          --disable-pip-version-check
-          --no-input
-          --require-hashes
-          --requirement .github/requirements/repository-quality.lock
-
-      - name: Run Lightning IT repository quality checks
-        run: python3 scripts/lit-repository-quality.py
-
-      - name: Build desired GitHub policy evidence
-        if: >-
-          hashFiles('scripts/audit-github-release-model.py') != '' &&
-          (hashFiles('release-model/repositories.yml') != '' ||
-          hashFiles('shared-assets/release-model/repositories.yml') != '')
-        run: >-
-          python3 scripts/audit-github-release-model.py
-          --output dist/github-release-model-audit.json
-
-      - name: Upload desired GitHub policy evidence
-        if: hashFiles('dist/github-release-model-audit.json') != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: github-release-model-audit
-          path: |
-            dist/github-release-model-audit.json
-            dist/github-release-model-audit.md
+      - name: Run canonical repository-quality profile
+        run: scripts/lit-ci-profile.sh repository-quality
