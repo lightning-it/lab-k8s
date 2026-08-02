@@ -34,6 +34,7 @@ cd "$repository_root"
 
 for required_path in \
   "$DEVTOOLS_WRAPPER" \
+  ".lit/repository.yml" \
   "scripts/lit-push-ready.py" \
   "scripts/lit-repository-quality.py"
 do
@@ -62,13 +63,19 @@ initial_fingerprint="$(fingerprint)" \
   || fail_closed "cannot fingerprint initial worktree"
 
 run_devtools() {
+  local network_mode="${1:-}"
+  shift || fail_closed "Devtool network mode is required"
+  case "$network_mode" in
+    none|bridge) ;;
+    *) fail_closed "unsupported Devtool network mode: $network_mode" ;;
+  esac
   env \
     CONTAINER_HOME=/tmp/wunder \
     WUNDER_DEVTOOLS_CAP_ADD= \
     WUNDER_DEVTOOLS_DOCKER_SOCKET=disabled \
     WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH=disabled \
     WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT=disabled \
-    WUNDER_DEVTOOLS_NETWORK=none \
+    WUNDER_DEVTOOLS_NETWORK="$network_mode" \
     WUNDER_DEVTOOLS_PRIVILEGED=0 \
     WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1 \
     WUNDER_DEVTOOLS_WORKSPACE_MODE=ro \
@@ -77,17 +84,41 @@ run_devtools() {
     "$DEVTOOLS_WRAPPER" "$@"
 }
 
+repository_type="$(
+  awk '
+    $1 == "repository_type:" {
+      count += 1
+      if (NF != 2) {
+        exit 2
+      }
+      value = $2
+    }
+    END {
+      if (count != 1) {
+        exit 3
+      }
+      print value
+    }
+  ' .lit/repository.yml
+)" || fail_closed "cannot resolve one repository_type from .lit/repository.yml"
+case "$repository_type" in
+  terraform_module|terraform_policy) quality_network="bridge" ;;
+  ""|*[!a-z0-9_]*) fail_closed "invalid repository_type: $repository_type" ;;
+  *) quality_network="none" ;;
+esac
+readonly quality_network
+
 printf '==> Verify Codex and Copilot instruction binding\n'
 python3 scripts/lit-push-ready.py instructions
 
 printf '==> Run repository quality in the pinned Devtool\n'
-run_devtools python3 scripts/lit-repository-quality.py
+run_devtools "$quality_network" python3 scripts/lit-repository-quality.py
 
 if [ -d tests ] && find tests -type f -name 'test*.py' -print -quit \
   | grep -q .
 then
   printf '==> Run repository unit tests in the pinned Devtool\n'
-  run_devtools python3 -m unittest discover -s tests -p 'test*.py'
+  run_devtools none python3 -m unittest discover -s tests -p 'test*.py'
 fi
 
 printf '==> Validate GitHub Actions workflows in the pinned Devtool\n'
@@ -99,7 +130,7 @@ workflow_paths=(
 shopt -u nullglob
 [ "${#workflow_paths[@]}" -gt 0 ] \
   || fail_closed "no GitHub Actions workflows were found for actionlint"
-run_devtools actionlint "${workflow_paths[@]}"
+run_devtools none actionlint "${workflow_paths[@]}"
 
 printf '==> Validate committed and local diffs\n'
 git diff --check "$merge_base"...HEAD --
