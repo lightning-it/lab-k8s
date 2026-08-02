@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -221,10 +222,10 @@ def check_terraform(repo_type: str) -> None:
                 )
         for validation_root in validation_roots:
             relative_root = validation_root.relative_to(ROOT)
-            chdir = "." if relative_root == Path(".") else relative_root.as_posix()
             # The canonical profile runs inside a read-only source checkout.
-            # Terraform normally creates .terraform below the validation root,
-            # so keep its transient data outside the repository instead. The
+            # Terraform writes both .terraform data and dependency lock-file
+            # updates below the validation root, so validate a temporary copy
+            # instead of allowing writes to the repository. The
             # managed Devtool mounts HOME as a fresh executable tmpfs because
             # downloaded provider binaries must be executable during validate.
             terraform_home = os.environ.get("HOME", "")
@@ -251,20 +252,49 @@ def check_terraform(repo_type: str) -> None:
             with tempfile.TemporaryDirectory(
                 prefix="lit-terraform-",
                 dir=resolved_temp_parent,
-            ) as data_dir:
+            ) as temporary_directory:
+                temporary_root = Path(temporary_directory)
+                workspace = temporary_root / "workspace"
+                data_dir = temporary_root / "data"
+                shutil.copytree(
+                    ROOT,
+                    workspace,
+                    symlinks=True,
+                    ignore=shutil.ignore_patterns(".git", ".terraform"),
+                )
+                data_dir.mkdir()
+                validation_copy = workspace / relative_root
+                resolved_workspace = workspace.resolve()
+                resolved_validation_copy = validation_copy.resolve()
+                lock_file = validation_copy / ".terraform.lock.hcl"
+                if (
+                    resolved_validation_copy != resolved_workspace
+                    and resolved_workspace not in resolved_validation_copy.parents
+                ) or lock_file.is_symlink():
+                    raise AssertionError(
+                        "Terraform validation copy must resolve inside its temporary "
+                        "workspace and use a regular dependency lock file"
+                    )
                 previous_data_dir = os.environ.get("TF_DATA_DIR")
-                os.environ["TF_DATA_DIR"] = data_dir
+                os.environ["TF_DATA_DIR"] = str(data_dir)
                 try:
                     run(
                         [
                             "terraform",
-                            f"-chdir={chdir}",
+                            f"-chdir={validation_copy}",
                             "init",
                             "-backend=false",
                             "-input=false",
                         ]
                     )
-                    run(["terraform", f"-chdir={chdir}", "validate", "-no-color"])
+                    run(
+                        [
+                            "terraform",
+                            f"-chdir={validation_copy}",
+                            "validate",
+                            "-no-color",
+                        ]
+                    )
                 finally:
                     if previous_data_dir is None:
                         os.environ.pop("TF_DATA_DIR", None)
