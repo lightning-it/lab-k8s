@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -221,16 +222,28 @@ def check_terraform(repo_type: str) -> None:
         for validation_root in validation_roots:
             relative_root = validation_root.relative_to(ROOT)
             chdir = "." if relative_root == Path(".") else relative_root.as_posix()
-            run(
-                [
-                    "terraform",
-                    f"-chdir={chdir}",
-                    "init",
-                    "-backend=false",
-                    "-input=false",
-                ]
-            )
-            run(["terraform", f"-chdir={chdir}", "validate", "-no-color"])
+            # The canonical profile runs inside a read-only source checkout.
+            # Terraform normally creates .terraform below the validation root,
+            # so keep its transient data outside the repository instead.
+            with tempfile.TemporaryDirectory(prefix="lit-terraform-") as data_dir:
+                previous_data_dir = os.environ.get("TF_DATA_DIR")
+                os.environ["TF_DATA_DIR"] = data_dir
+                try:
+                    run(
+                        [
+                            "terraform",
+                            f"-chdir={chdir}",
+                            "init",
+                            "-backend=false",
+                            "-input=false",
+                        ]
+                    )
+                    run(["terraform", f"-chdir={chdir}", "validate", "-no-color"])
+                finally:
+                    if previous_data_dir is None:
+                        os.environ.pop("TF_DATA_DIR", None)
+                    else:
+                        os.environ["TF_DATA_DIR"] = previous_data_dir
     else:
         print("Terraform CLI not installed; checked Terraform file presence only")
 
