@@ -118,7 +118,10 @@ if [ -d tests ] && find tests -type f -name 'test*.py' -print -quit \
   | grep -q .
 then
   printf '==> Run repository unit tests in the pinned Devtool\n'
-  run_devtools none python3 -m unittest discover -s tests -p 'test*.py'
+  # Tests may execute temporary command shims. Keep their temporary files on
+  # the fresh executable HOME tmpfs instead of the generic /tmp mount.
+  run_devtools none env TMPDIR=/tmp/wunder \
+    python3 -m unittest discover -s tests -p 'test*.py'
 fi
 
 printf '==> Validate GitHub Actions workflows in the pinned Devtool\n'
