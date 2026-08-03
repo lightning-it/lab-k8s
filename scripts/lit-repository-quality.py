@@ -202,7 +202,6 @@ def check_terraform(repo_type: str) -> None:
     if repo_type == "terraform_module" and not any(path.parent == ROOT for path in tf_files):
         raise AssertionError("Terraform module repository has no root *.tf files")
     if shutil_which("terraform"):
-        run(["terraform", "fmt", "-check", "-recursive"])
         if repo_type == "terraform_module":
             validation_roots = [ROOT]
         else:
@@ -220,64 +219,89 @@ def check_terraform(repo_type: str) -> None:
                     "Terraform policy repository has no explicit validation root; "
                     "add .terraform.lock.hcl, versions.tf, or backend.tf"
                 )
-        for validation_root in validation_roots:
-            relative_root = validation_root.relative_to(ROOT)
-            # The canonical profile runs inside a read-only source checkout.
-            # Terraform writes both .terraform data and dependency lock-file
-            # updates below the validation root, so validate a temporary copy
-            # instead of allowing writes to the repository. The
-            # managed Devtool mounts HOME as a fresh executable tmpfs because
-            # downloaded provider binaries must be executable during validate.
-            terraform_home = os.environ.get("HOME", "")
-            terraform_temp_parent = Path(terraform_home)
-            resolved_temp_parent = (
-                terraform_temp_parent.resolve()
-                if terraform_home and terraform_temp_parent.is_absolute()
-                else terraform_temp_parent
+        # The canonical profile runs inside a read-only source checkout.
+        # Terraform writes both .terraform data and dependency lock-file
+        # updates below each validation root, so validate one temporary copy
+        # instead of allowing writes to the repository. The managed Devtool
+        # mounts HOME as a fresh executable tmpfs because downloaded provider
+        # binaries must be executable during validate.
+        terraform_home = os.environ.get("HOME", "")
+        terraform_temp_parent = Path(terraform_home)
+        resolved_temp_parent = (
+            terraform_temp_parent.resolve()
+            if terraform_home and terraform_temp_parent.is_absolute()
+            else terraform_temp_parent
+        )
+        resolved_root = ROOT.resolve()
+        if (
+            not terraform_home
+            or not terraform_temp_parent.is_absolute()
+            or not terraform_temp_parent.is_dir()
+            or terraform_temp_parent.is_symlink()
+            or resolved_temp_parent == resolved_root
+            or resolved_root in resolved_temp_parent.parents
+        ):
+            raise AssertionError(
+                "Terraform validation requires an absolute, existing, "
+                "non-symlink HOME outside the repository for executable "
+                "temporary data"
             )
-            resolved_root = ROOT.resolve()
-            if (
-                not terraform_home
-                or not terraform_temp_parent.is_absolute()
-                or not terraform_temp_parent.is_dir()
-                or terraform_temp_parent.is_symlink()
-                or resolved_temp_parent == resolved_root
-                or resolved_root in resolved_temp_parent.parents
+        with tempfile.TemporaryDirectory(
+            prefix="lit-terraform-",
+            dir=resolved_temp_parent,
+        ) as temporary_directory:
+            temporary_root = Path(temporary_directory)
+            workspace = temporary_root / "workspace"
+            data_root = temporary_root / "data"
+            shutil.copytree(
+                ROOT,
+                workspace,
+                symlinks=True,
+                ignore=shutil.ignore_patterns(".git", ".terraform"),
+            )
+            for current_root, directory_names, file_names in os.walk(
+                workspace,
+                followlinks=False,
             ):
-                raise AssertionError(
-                    "Terraform validation requires an absolute, existing, "
-                    "non-symlink HOME outside the repository for executable "
-                    "temporary data"
-                )
-            with tempfile.TemporaryDirectory(
-                prefix="lit-terraform-",
-                dir=resolved_temp_parent,
-            ) as temporary_directory:
-                temporary_root = Path(temporary_directory)
-                workspace = temporary_root / "workspace"
-                data_dir = temporary_root / "data"
-                shutil.copytree(
-                    ROOT,
-                    workspace,
-                    symlinks=True,
-                    ignore=shutil.ignore_patterns(".git", ".terraform"),
-                )
-                data_dir.mkdir()
-                validation_copy = workspace / relative_root
-                resolved_workspace = workspace.resolve()
-                resolved_validation_copy = validation_copy.resolve()
-                lock_file = validation_copy / ".terraform.lock.hcl"
-                if (
-                    resolved_validation_copy != resolved_workspace
-                    and resolved_workspace not in resolved_validation_copy.parents
-                ) or lock_file.is_symlink():
-                    raise AssertionError(
-                        "Terraform validation copy must resolve inside its temporary "
-                        "workspace and use a regular dependency lock file"
-                    )
-                previous_data_dir = os.environ.get("TF_DATA_DIR")
-                os.environ["TF_DATA_DIR"] = str(data_dir)
-                try:
+                current_path = Path(current_root)
+                for name in (*directory_names, *file_names):
+                    candidate = current_path / name
+                    if candidate.is_symlink():
+                        raise AssertionError(
+                            "Terraform validation workspace may not contain "
+                            f"symlinks: {candidate.relative_to(workspace)}"
+                        )
+            run(
+                [
+                    "terraform",
+                    f"-chdir={workspace}",
+                    "fmt",
+                    "-check",
+                    "-recursive",
+                ]
+            )
+            data_root.mkdir()
+            previous_data_dir = os.environ.get("TF_DATA_DIR")
+            try:
+                for root_index, validation_root in enumerate(validation_roots):
+                    relative_root = validation_root.relative_to(ROOT)
+                    data_dir = data_root / f"{root_index:04d}"
+                    data_dir.mkdir()
+                    validation_copy = workspace / relative_root
+                    resolved_workspace = workspace.resolve()
+                    resolved_validation_copy = validation_copy.resolve()
+                    lock_file = validation_copy / ".terraform.lock.hcl"
+                    if (
+                        resolved_validation_copy != resolved_workspace
+                        and resolved_workspace not in resolved_validation_copy.parents
+                    ) or validation_copy.is_symlink() or not validation_copy.is_dir() or (
+                        lock_file.exists() and not lock_file.is_file()
+                    ):
+                        raise AssertionError(
+                            "Terraform validation copy must resolve inside its temporary "
+                            "workspace and use a regular dependency lock file"
+                        )
+                    os.environ["TF_DATA_DIR"] = str(data_dir)
                     run(
                         [
                             "terraform",
@@ -295,11 +319,11 @@ def check_terraform(repo_type: str) -> None:
                             "-no-color",
                         ]
                     )
-                finally:
-                    if previous_data_dir is None:
-                        os.environ.pop("TF_DATA_DIR", None)
-                    else:
-                        os.environ["TF_DATA_DIR"] = previous_data_dir
+            finally:
+                if previous_data_dir is None:
+                    os.environ.pop("TF_DATA_DIR", None)
+                else:
+                    os.environ["TF_DATA_DIR"] = previous_data_dir
     else:
         print("Terraform CLI not installed; checked Terraform file presence only")
 

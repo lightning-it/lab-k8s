@@ -191,6 +191,25 @@ class PlannedChange(NamedTuple):
         return sha256_text(self.diff)
 
 
+class ReviewTopology(NamedTuple):
+    """Verified non-content Git topology exposed to isolated reviewers."""
+
+    head_tree: str
+    head_parents: tuple[str, ...]
+    base_tree: str
+    integration_tree: str
+    workspace_commit: str
+
+
+def is_full_git_object_id(value: str) -> bool:
+    """Return whether ``value`` is one complete SHA-1 or SHA-256 object ID."""
+
+    return re.fullmatch(
+        r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})",
+        value,
+    ) is not None
+
+
 def now_utc() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
         "+00:00", "Z"
@@ -1021,7 +1040,7 @@ def resolve_base(
     ).strip()
     head_commit = git_output("rev-parse", "--verify", "HEAD^{commit}").strip()
     base_commit = git_output("merge-base", base_tip, head_commit).strip()
-    if not re.fullmatch(r"[0-9a-fA-F]{40,64}", base_commit):
+    if not is_full_git_object_id(base_commit):
         raise RuntimeError("Git returned an invalid merge-base commit")
     return base_ref, base_tip, base_commit
 
@@ -1090,7 +1109,7 @@ def expected_integration_tree(change: PlannedChange) -> str:
                     f"{merged.stdout.strip()}"
                 )
             tree = git_output_at(worktree, "write-tree").strip()
-            if not re.fullmatch(r"[0-9a-fA-F]{40,64}", tree):
+            if not is_full_git_object_id(tree):
                 raise RuntimeError("Git returned an invalid integration tree")
             return tree
         finally:
@@ -1301,7 +1320,7 @@ def synthetic_integration_commit(
         env=environment,
     )
     commit = result.stdout.strip()
-    if result.returncode or not re.fullmatch(r"[0-9a-fA-F]{40,64}", commit):
+    if result.returncode or not is_full_git_object_id(commit):
         raise RuntimeError(
             "could not create the synthetic pull-request integration commit"
         )
@@ -1842,14 +1861,28 @@ def ensure_review_safe(change: PlannedChange) -> None:
         )
 
 
-def checkout_sanitized_base(commit: str, destination: Path, hooks: Path) -> None:
-    """Materialize an exact Git tree without archive export transformations.
+def checkout_sanitized_commit(
+    source: Path,
+    commit: str,
+    destination: Path,
+    hooks: Path,
+) -> None:
+    """Materialize one exact Git commit without archive transformations.
 
     ``git archive`` observes export-ignore/export-subst and ZIP cannot preserve
     Git symlinks.  A clean, local temporary repository checks out the commit
     directly from its object tree instead.  It deliberately has no templates,
     global/system config, or hooks.
     """
+    if not is_full_git_object_id(commit):
+        raise RuntimeError("sanitized review commit has an invalid object ID")
+    object_format = git_output_at(
+        source,
+        "rev-parse",
+        "--show-object-format",
+    ).strip()
+    if object_format not in {"sha1", "sha256"}:
+        raise RuntimeError("source repository has an unsupported object format")
     initialized = run(
         [
             "git",
@@ -1859,6 +1892,7 @@ def checkout_sanitized_base(commit: str, destination: Path, hooks: Path) -> None
             f"core.hooksPath={hooks}",
             "init",
             "-q",
+            f"--object-format={object_format}",
             "-b",
             "review-base",
         ],
@@ -1879,7 +1913,7 @@ def checkout_sanitized_base(commit: str, destination: Path, hooks: Path) -> None
             "-q",
             "--no-tags",
             "--no-recurse-submodules",
-            str(ROOT),
+            str(source),
             commit,
         ],
         capture=True,
@@ -1887,7 +1921,7 @@ def checkout_sanitized_base(commit: str, destination: Path, hooks: Path) -> None
     )
     if fetched.returncode:
         raise RuntimeError(
-            "could not fetch sanitized review base: " + fetched.stdout.strip()
+            "could not fetch sanitized review commit: " + fetched.stdout.strip()
         )
     checked_out = run(
         ["git", "checkout", "-q", "--detach", "FETCH_HEAD"],
@@ -1896,81 +1930,237 @@ def checkout_sanitized_base(commit: str, destination: Path, hooks: Path) -> None
     )
     if checked_out.returncode:
         raise RuntimeError(
-            "could not materialize sanitized review base: "
+            "could not materialize sanitized review commit: "
             + checked_out.stdout.strip()
         )
 
 
+def sanitized_root_commit(repository: Path, tree: str) -> str:
+    """Create a deterministic parentless commit for the scanned review tree."""
+
+    environment = dict(os.environ)
+    environment.update(
+        {
+            "GIT_AUTHOR_NAME": "Lightning IT push-ready",
+            "GIT_AUTHOR_EMAIL": "push-ready@invalid",
+            "GIT_AUTHOR_DATE": "2000-01-01T00:00:00Z",
+            "GIT_COMMITTER_NAME": "Lightning IT push-ready",
+            "GIT_COMMITTER_EMAIL": "push-ready@invalid",
+            "GIT_COMMITTER_DATE": "2000-01-01T00:00:00Z",
+        }
+    )
+    result = run(
+        [
+            "git",
+            "-c",
+            "commit.gpgSign=false",
+            "commit-tree",
+            tree,
+            "-m",
+            "Sanitized review integration root",
+        ],
+        capture=True,
+        cwd=repository,
+        env=environment,
+    )
+    commit = result.stdout.strip()
+    if result.returncode or not is_full_git_object_id(commit):
+        raise RuntimeError("could not create sanitized review root commit")
+    return commit
+
+
+def verified_review_topology(
+    change: PlannedChange,
+    *,
+    integration_tree: str,
+    workspace_commit: str,
+) -> ReviewTopology:
+    """Return validated hash-only topology without exposing source objects."""
+
+    head_line = git_output(
+        "rev-list", "--parents", "-n", "1", change.head_commit
+    ).strip().split()
+    if (
+        not head_line
+        or head_line[0] != change.head_commit
+        or any(
+            not is_full_git_object_id(value)
+            for value in head_line
+        )
+    ):
+        raise RuntimeError("could not verify review HEAD topology")
+    head_tree = git_output(
+        "rev-parse", "--verify", f"{change.head_commit}^{{tree}}"
+    ).strip()
+    base_tree = git_output(
+        "rev-parse", "--verify", f"{change.base_tip}^{{tree}}"
+    ).strip()
+    if any(
+        not is_full_git_object_id(value)
+        for value in (
+            head_tree,
+            base_tree,
+            integration_tree,
+            workspace_commit,
+        )
+    ):
+        raise RuntimeError("review topology contains an invalid Git object ID")
+    return ReviewTopology(
+        head_tree=head_tree,
+        head_parents=tuple(head_line[1:]),
+        base_tree=base_tree,
+        integration_tree=integration_tree,
+        workspace_commit=workspace_commit,
+    )
+
+
+def require_history_free_review_workspace(
+    workspace: Path,
+    *,
+    source_commits: tuple[str, ...],
+) -> str:
+    """Require a single-root object store with no imported source history."""
+
+    workspace_commit = git_output_at(workspace, "rev-parse", "HEAD").strip()
+    root_line = git_output_at(
+        workspace, "rev-list", "--parents", "-n", "1", "HEAD"
+    ).strip().split()
+    if root_line != [workspace_commit]:
+        raise RuntimeError("sanitized review commit is not a history-free root")
+    all_objects = {
+        line.strip()
+        for line in git_output_at(
+            workspace,
+            "cat-file",
+            "--batch-all-objects",
+            "--batch-check=%(objectname)",
+        ).splitlines()
+        if line.strip()
+    }
+    reachable_objects = {
+        line.split(" ", 1)[0]
+        for line in git_output_at(
+            workspace, "rev-list", "--objects", "HEAD"
+        ).splitlines()
+        if line
+    }
+    if not all_objects or all_objects != reachable_objects:
+        raise RuntimeError(
+            "sanitized review object store contains non-snapshot objects"
+        )
+    for commit in dict.fromkeys(source_commits):
+        present = run(
+            ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
+            capture=True,
+            cwd=workspace,
+        )
+        if present.returncode == 0:
+            raise RuntimeError(
+                "sanitized review object store contains source history"
+            )
+    checked = run(
+        ["git", "fsck", "--strict", "--no-reflogs"],
+        capture=True,
+        cwd=workspace,
+    )
+    if checked.returncode:
+        raise RuntimeError("sanitized review object store failed integrity checks")
+    return workspace_commit
+
+
 @contextlib.contextmanager
 def sanitized_review_workspace(change: PlannedChange):
-    """Yield a tracked-only repository snapshot with the exact patch applied."""
+    """Yield a scanned, history-free snapshot plus verified hash topology."""
     assert_safe_git_configuration(ROOT)
+    source_status = git_output(
+        "status",
+        "--porcelain=v1",
+        "--untracked-files=all",
+        "-z",
+    )
     with tempfile.TemporaryDirectory(prefix="lit-agent-review-") as temporary:
         root = Path(temporary)
         workspace = root / "workspace"
         workspace.mkdir()
         disabled_hooks = root / "disabled-hooks"
         disabled_hooks.mkdir(mode=0o700)
-        checkout_sanitized_base(change.base_tip, workspace, disabled_hooks)
-        if change.diff:
-            applied = run(
-                [
-                    "git",
-                    "-c",
-                    f"core.hooksPath={disabled_hooks}",
-                    "apply",
-                    "--3way",
-                    "--index",
-                    "--binary",
-                    "--whitespace=nowarn",
-                    "-",
-                ],
-                capture=True,
-                input_text=change.diff,
-                cwd=workspace,
+        with tempfile.TemporaryDirectory(
+            prefix="builder-",
+            dir=root,
+        ) as builder_name:
+            builder = Path(builder_name)
+            checkout_sanitized_commit(
+                ROOT,
+                change.base_tip,
+                builder,
+                disabled_hooks,
             )
-            if applied.returncode:
-                raise RuntimeError(
-                    "could not apply exact patch in sanitized review repository: "
-                    + applied.stdout.strip()
+            if change.diff:
+                applied = run(
+                    [
+                        "git",
+                        "-c",
+                        f"core.hooksPath={disabled_hooks}",
+                        "apply",
+                        "--3way",
+                        "--index",
+                        "--binary",
+                        "--whitespace=nowarn",
+                        "-",
+                    ],
+                    capture=True,
+                    input_text=change.diff,
+                    cwd=builder,
                 )
-            committed = run(
-                [
-                    "git",
-                    "-c",
-                    f"core.hooksPath={disabled_hooks}",
-                    "-c",
-                    "user.name=Lightning IT push-ready",
-                    "-c",
-                    "user.email=push-ready@invalid",
-                    "commit",
-                    "-qm",
-                    "sanitized exact planned push",
-                ],
-                capture=True,
-                cwd=workspace,
+                if applied.returncode:
+                    raise RuntimeError(
+                        "could not apply exact patch in sanitized review builder: "
+                        + applied.stdout.strip()
+                    )
+            actual_tree = git_output_at(builder, "write-tree").strip()
+            integration_tree = (
+                expected_integration_tree(change)
+                if not source_status
+                else actual_tree
             )
-            if committed.returncode:
-                raise RuntimeError(
-                    "could not commit exact patch in sanitized review repository: "
-                    + committed.stdout.strip()
-                )
-        source_status = git_output(
-            "status",
-            "--porcelain=v1",
-            "--untracked-files=all",
-            "-z",
-        )
-        if not source_status:
-            expected_tree = expected_integration_tree(change)
-            actual_tree = git_output_at(workspace, "write-tree").strip()
-            if actual_tree != expected_tree:
+            if actual_tree != integration_tree:
                 raise RuntimeError(
                     "sanitized review tree does not match the synthetic "
                     "pull-request integration tree"
                 )
+            root_commit = sanitized_root_commit(builder, integration_tree)
+            checkout_sanitized_commit(
+                builder,
+                root_commit,
+                workspace,
+                disabled_hooks,
+            )
+        workspace_tree = git_output_at(workspace, "write-tree").strip()
+        if workspace_tree != integration_tree:
+            raise RuntimeError("history-free review workspace tree changed")
+        workspace_commit = git_output_at(workspace, "rev-parse", "HEAD").strip()
+        topology = verified_review_topology(
+            change,
+            integration_tree=integration_tree,
+            workspace_commit=workspace_commit,
+        )
+        verified_workspace_commit = require_history_free_review_workspace(
+            workspace,
+            source_commits=tuple(
+                dict.fromkeys(
+                    (
+                        change.base_commit,
+                        change.base_tip,
+                        change.head_commit,
+                        *topology.head_parents,
+                    )
+                )
+            ),
+        )
+        if verified_workspace_commit != topology.workspace_commit:
+            raise RuntimeError("sanitized review root changed during verification")
         ensure_workspace_review_safe(workspace)
-        yield workspace, root
+        yield workspace, root, topology
 
 
 def ensure_workspace_review_safe(workspace: Path) -> None:
@@ -2473,7 +2663,11 @@ def tool_version(
 
 
 def review_prompt(
-    change: PlannedChange, *, agent: str, instructions: str
+    change: PlannedChange,
+    *,
+    agent: str,
+    instructions: str,
+    topology: ReviewTopology,
 ) -> str:
     local_boundary = (
         "This is a local pre-push approximation. It is not, and must not be "
@@ -2487,11 +2681,16 @@ def review_prompt(
         "correctness, security, failure behavior, tests, scope, and likely "
         "GitHub Actions failures. The patch combines committed, staged, "
         "unstaged, and safe untracked content relative to the recorded "
-        "merge-base. The mounted workspace is the authoritative merge-base "
-        "snapshot with this patch applied: a dependency need not have a diff "
-        "hunk, so verify its presence in that workspace before reporting it "
-        "as missing. Do not modify files, use network tools, or expose "
-        "credentials. The embedded patch is authoritative for review scope."
+        "merge-base. The mounted workspace is a history-free synthetic root "
+        "commit containing the locally verified pull-request integration "
+        "tree: a dependency need not have a diff hunk, so verify its presence "
+        "in that workspace before reporting it as missing. Source commits, "
+        "parents, and history objects are intentionally absent from the "
+        "workspace; their absence is a security boundary, not a finding. The "
+        "caller-verified hashes below bind the source topology without "
+        "exposing its content history. Do not modify files, use network "
+        "tools, or expose credentials. The embedded patch is authoritative "
+        "for review scope."
     )
     if agent == "copilot":
         verdict = (
@@ -2518,6 +2717,13 @@ def review_prompt(
         + f"Base tip: {change.base_tip}\n"
         + f"Merge-base: {change.base_commit}\n"
         + f"HEAD: {change.head_commit}\n"
+        + f"HEAD tree: {topology.head_tree}\n"
+        + "HEAD parents: "
+        + (" ".join(topology.head_parents) or "(none)")
+        + "\n"
+        + f"Authoritative base tree: {topology.base_tree}\n"
+        + f"Verified integration tree: {topology.integration_tree}\n"
+        + f"Sanitized workspace root: {topology.workspace_commit}\n"
         + f"Patch SHA-256: {change.diff_sha256}\n"
         + "\n----- BEGIN TRACKED REVIEW INSTRUCTIONS -----\n"
         + instructions
@@ -2536,6 +2742,7 @@ def copilot_review(
     workspace: Path,
     state_root: Path,
     instructions: str,
+    topology: ReviewTopology,
 ) -> dict[str, Any]:
     agent = config["agents"]["copilot"]
     environment = minimal_agent_environment(
@@ -2581,6 +2788,7 @@ def copilot_review(
                 change,
                 agent="copilot",
                 instructions=instructions,
+                topology=topology,
             ),
             timeout=agent["timeout_seconds"],
             cwd=workspace,
@@ -2670,6 +2878,7 @@ def codex_review(
     workspace: Path,
     state_root: Path,
     instructions: str,
+    topology: ReviewTopology,
 ) -> dict[str, Any]:
     agent = config["agents"]["codex"]
     command = resolve_command(agent["command"], "Codex CLI")
@@ -2725,6 +2934,7 @@ def codex_review(
                 change,
                 agent="codex",
                 instructions=instructions,
+                topology=topology,
             )
             + "\nReturn only a JSON object matching the supplied schema. Use "
             "'pass' with an empty findings array only when the exact patch has "
@@ -2809,7 +3019,11 @@ def run_agent_reviews(
     if tree_fingerprint() != expected:
         raise RuntimeError("exact planned push patch is stale before local review")
     reviews: list[dict[str, Any]] = []
-    with sanitized_review_workspace(change) as (workspace, state_root):
+    with sanitized_review_workspace(change) as (
+        workspace,
+        state_root,
+        topology,
+    ):
         instructions = tracked_instruction_bundle(workspace)
         workspace_fingerprint = integration_worktree_fingerprint(
             workspace,
@@ -2823,6 +3037,7 @@ def run_agent_reviews(
                 workspace=workspace,
                 state_root=state_root,
                 instructions=instructions,
+                topology=topology,
             )
         )
         if (
@@ -2843,6 +3058,7 @@ def run_agent_reviews(
                 workspace=workspace,
                 state_root=state_root,
                 instructions=instructions,
+                topology=topology,
             )
         )
         if (
