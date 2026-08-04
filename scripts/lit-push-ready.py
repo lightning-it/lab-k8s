@@ -1082,6 +1082,22 @@ def expected_integration_tree(change: PlannedChange) -> str:
             purpose="compatibility merge worktree",
         )
         try:
+            refreshed = run(
+                [
+                    "git",
+                    "-c",
+                    f"core.hooksPath={disabled_hooks}",
+                    "update-index",
+                    "--refresh",
+                ],
+                capture=True,
+                cwd=worktree,
+            )
+            if refreshed.returncode:
+                raise RuntimeError(
+                    "could not refresh the compatibility merge worktree "
+                    "index: " + refreshed.stdout.strip()
+                )
             merged = run(
                 [
                     "git",
