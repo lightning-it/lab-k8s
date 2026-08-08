@@ -3434,8 +3434,8 @@ def verify_pre_push_updates(
             local_ref != expected_branch
             or remote_ref != expected_branch
             or not local_ref.startswith("refs/heads/")
-            or not re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", local_oid)
-            or not re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", remote_oid)
+            or not is_full_git_object_id(local_oid)
+            or not is_full_git_object_id(remote_oid)
         ):
             raise RuntimeError("pre-push received an unsafe ref update")
         if set(local_oid) == {"0"}:
