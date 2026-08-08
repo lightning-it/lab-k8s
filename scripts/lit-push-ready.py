@@ -2698,7 +2698,7 @@ def review_prompt(
         "GitHub Actions failures. The patch combines committed, staged, "
         "unstaged, and safe untracked content relative to the recorded "
         "merge-base. The mounted workspace is a history-free synthetic root "
-        "commit containing the locally verified pull-request integration "
+        "commit containing the locally verified review workspace "
         "tree: a dependency need not have a diff hunk, so verify its presence "
         "in that workspace before reporting it as missing. Source commits, "
         "parents, and history objects are intentionally absent from the "
@@ -2738,7 +2738,10 @@ def review_prompt(
         + (" ".join(topology.head_parents) or "(none)")
         + "\n"
         + f"Authoritative base tree: {topology.base_tree}\n"
-        + f"Verified integration tree: {topology.integration_tree}\n"
+        + (
+            "Locally verified review workspace tree: "
+            f"{topology.integration_tree}\n"
+        )
         + f"Sanitized workspace root: {topology.workspace_commit}\n"
         + f"Patch SHA-256: {change.diff_sha256}\n"
         + "\n----- BEGIN TRACKED REVIEW INSTRUCTIONS -----\n"
