@@ -94,6 +94,10 @@ SECRET_CONTENT_PATTERNS = (
 NPMRC_AUTH_PATTERN = re.compile(
     r"(?im)(?:^|[+:])\s*(?:_authToken|_auth|_password|username)\s*="
 )
+SECRET_FIXTURE_MANIFEST_PATH = ".lit/push-ready-secret-fixtures.json"
+SECRET_FIXTURE_PATH_PREFIXES = ("examples/", "molecule/", "tests/")
+MAX_SECRET_FIXTURE_MANIFEST_BYTES = 100_000
+MAX_SECRET_FIXTURE_SOURCE_BYTES = 10_000_000
 INSTRUCTION_PATH_PATTERN = re.compile(
     r"(?:^|/)AGENTS\.md$|^\.github/copilot-instructions\.md$|"
     r"^\.github/instructions/.+\.instructions\.md$"
@@ -114,6 +118,7 @@ CHECK_PROFILE = {
 }
 TRUSTED_CHECK_POLICY_PATHS = (
     ".lit/push-ready.json",
+    SECRET_FIXTURE_MANIFEST_PATH,
     "scripts/lit-ci-profile.sh",
     "default/scripts/lit-push-ready.py",
     "default/scripts/wunder-devtools-ee.sh",
@@ -1214,7 +1219,11 @@ def git_tree_entry(commit: str, path: str) -> str:
     return result.stdout
 
 
-def require_trusted_check_policy(change: PlannedChange) -> None:
+def require_trusted_check_policy(
+    change: PlannedChange,
+    *,
+    allow_secret_fixture_bootstrap: bool = False,
+) -> None:
     """Refuse local host execution when executable policy differs from base."""
     try:
         running_engine = (
@@ -1233,6 +1242,11 @@ def require_trusted_check_policy(change: PlannedChange) -> None:
         running_engine,
     }
     for path in policy_paths:
+        if (
+            path == SECRET_FIXTURE_MANIFEST_PATH
+            and allow_secret_fixture_bootstrap
+        ):
+            continue
         base_entry = git_tree_entry(change.base_tip, path)
         head_entry = git_tree_entry(change.head_commit, path)
         if path in required_paths and (not base_entry or not head_entry):
@@ -1660,6 +1674,78 @@ def quote_diff_path(prefix: str, name: str) -> str:
     return value
 
 
+def unquote_diff_path(value: str, prefix: str) -> Optional[str]:
+    """Decode one Git unified-diff path without consulting repository state."""
+    if value == "/dev/null":
+        return None
+    if value.startswith('"'):
+        if len(value) < 2 or not value.endswith('"'):
+            raise RuntimeError("planned diff contains a malformed quoted path")
+        payload = value[1:-1]
+        decoded = bytearray()
+        index = 0
+        escapes = {
+            "a": 0x07,
+            "b": 0x08,
+            "t": 0x09,
+            "n": 0x0A,
+            "v": 0x0B,
+            "f": 0x0C,
+            "r": 0x0D,
+            '"': 0x22,
+            "\\": 0x5C,
+        }
+        while index < len(payload):
+            character = payload[index]
+            if character != "\\":
+                decoded.extend(character.encode("utf-8"))
+                index += 1
+                continue
+            index += 1
+            if index >= len(payload):
+                raise RuntimeError("planned diff quoted path ends in an escape")
+            escaped = payload[index]
+            if escaped in escapes:
+                decoded.append(escapes[escaped])
+                index += 1
+                continue
+            if escaped not in "01234567":
+                raise RuntimeError("planned diff quoted path has an unsafe escape")
+            octal = payload[index : index + 3]
+            if len(octal) != 3 or any(
+                octal_character not in "01234567"
+                for octal_character in octal
+            ):
+                raise RuntimeError("planned diff quoted path has invalid octal")
+            decoded.append(int(octal, 8))
+            index += 3
+        try:
+            path_value = decoded.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise RuntimeError("planned diff path is not UTF-8") from exc
+    else:
+        if any(character.isspace() for character in value):
+            raise RuntimeError("planned diff unquoted path contains whitespace")
+        path_value = value
+    expected = f"{prefix}/"
+    if not path_value.startswith(expected):
+        raise RuntimeError("planned diff path has an unexpected prefix")
+    path = path_value[len(expected) :]
+    if (
+        not path
+        or path.startswith("/")
+        or "\\" in path
+        or any(
+            ord(character) < 0x20 or ord(character) == 0x7F
+            for character in path
+        )
+        or Path(path).as_posix() != path
+        or any(part in {"", ".", "..", ".git"} for part in Path(path).parts)
+    ):
+        raise RuntimeError("planned diff contains an unsafe repository path")
+    return path
+
+
 def render_untracked_patch(
     name: str, payload: bytes, mode: int
 ) -> str:
@@ -1702,7 +1788,10 @@ def render_untracked_patch(
 
 
 def planned_change(
-    config: dict[str, Any], *, base_override: Optional[str] = None
+    config: dict[str, Any],
+    *,
+    base_override: Optional[str] = None,
+    bootstrap_secret_fixtures: bool = False,
 ) -> PlannedChange:
     initial_tree_fingerprint = tree_fingerprint()
     base_ref, base_tip, base_commit = resolve_base(config, base_override)
@@ -1712,6 +1801,7 @@ def planned_change(
         "--no-ext-diff",
         "--no-textconv",
         "--binary",
+        "--no-renames",
         "--unified=40",
         base_commit,
         "--",
@@ -1782,7 +1872,13 @@ def planned_change(
         untracked_sha256=untracked_hashes,
         tree_fingerprint=final_tree_fingerprint,
     )
-    ensure_review_safe(change)
+    ensure_review_safe(
+        change,
+        secret_fixture_manifest_for_change(
+            change,
+            bootstrap=bootstrap_secret_fixtures,
+        ),
+    )
     return change
 
 
@@ -1853,7 +1949,325 @@ def untracked_review_text(max_bytes: int = 1_000_000) -> str:
     return "\n".join(chunks)
 
 
-def ensure_review_safe(change: PlannedChange) -> None:
+def parse_secret_fixture_manifest(
+    payload: str,
+) -> dict[str, dict[int, tuple[str, str]]]:
+    """Validate an auditable, path-bound synthetic fixture manifest."""
+    document = json.loads(payload)
+    if not isinstance(document, dict) or set(document) != {
+        "version",
+        "fixtures",
+    }:
+        raise RuntimeError(
+            "secret fixture manifest must contain exactly version and fixtures"
+        )
+    if document["version"] != 1:
+        raise RuntimeError("secret fixture manifest version must be 1")
+    fixtures = document["fixtures"]
+    if not isinstance(fixtures, list) or not 1 <= len(fixtures) <= 100:
+        raise RuntimeError(
+            "secret fixture manifest must contain between 1 and 100 entries"
+        )
+    parsed: dict[str, dict[int, tuple[str, str]]] = {}
+    for entry in fixtures:
+        if not isinstance(entry, dict) or set(entry) != {
+            "path",
+            "line_hex",
+            "line_number",
+            "purpose",
+        }:
+            raise RuntimeError(
+                "secret fixture entries must contain exactly path, line_hex, "
+                "line_number, and purpose"
+            )
+        path = entry["path"]
+        encoded = entry["line_hex"]
+        line_number = entry["line_number"]
+        if entry["purpose"] != "synthetic-test-fixture":
+            raise RuntimeError(
+                "secret fixture manifest purpose must be synthetic-test-fixture"
+            )
+        if (
+            isinstance(line_number, bool)
+            or not isinstance(line_number, int)
+            or not 1 <= line_number <= 10_000_000
+        ):
+            raise RuntimeError(
+                "secret fixture manifest line_number must be a positive integer"
+            )
+        if (
+            not isinstance(path, str)
+            or not path
+            or len(path) > 500
+            or path.startswith("/")
+            or "\\" in path
+            or ":" in path
+            or any(
+                ord(character) < 0x20 or ord(character) == 0x7F
+                for character in path
+            )
+            or Path(path).as_posix() != path
+            or any(part in {"", ".", "..", ".git"} for part in Path(path).parts)
+            or not path.startswith(SECRET_FIXTURE_PATH_PREFIXES)
+        ):
+            raise RuntimeError("secret fixture manifest contains an unsafe path")
+        lowered = path.lower()
+        if (
+            any(part in lowered for part in SECRET_PATH_PARTS)
+            or Path(path).name.lower() == ".npmrc"
+        ):
+            raise RuntimeError(
+                "secret fixture manifest may not authorize secret-like paths"
+            )
+        if (
+            not isinstance(encoded, str)
+            or not re.fullmatch(r"[0-9a-f]+", encoded)
+            or len(encoded) % 2
+            or len(encoded) > 20_000
+        ):
+            raise RuntimeError(
+                "secret fixture manifest line_hex must be bounded lowercase hex"
+            )
+        try:
+            line = bytes.fromhex(encoded).decode("utf-8")
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise RuntimeError(
+                "secret fixture manifest line_hex must encode UTF-8"
+            ) from exc
+        if not line or "\n" in line or "\r" in line:
+            raise RuntimeError(
+                "secret fixture manifest entries must encode one non-empty line"
+            )
+        if not any(pattern.search(line) for pattern in SECRET_CONTENT_PATTERNS):
+            raise RuntimeError(
+                "secret fixture manifest entry is not secret-like"
+            )
+        digest = sha256_text(line)
+        path_entries = parsed.setdefault(path, {})
+        if line_number in path_entries:
+            raise RuntimeError(
+                "secret fixture manifest contains a duplicate line position"
+            )
+        path_entries[line_number] = (digest, line)
+    return parsed
+
+
+def repository_blob_at_commit(
+    commit: str,
+    path: str,
+    *,
+    max_bytes: int,
+) -> Optional[str]:
+    """Read one bounded UTF-8 blob from an exact local commit."""
+    if not is_full_git_object_id(commit):
+        raise RuntimeError("secret fixture manifest commit is invalid")
+    object_name = f"{commit}:{path}"
+    exists = run(["git", "cat-file", "-e", object_name], capture=True)
+    if exists.returncode:
+        return None
+    size_value = git_output("cat-file", "-s", object_name).strip()
+    if not size_value.isdigit() or int(size_value) > max_bytes:
+        raise RuntimeError("secret fixture manifest source blob is too large")
+    value = git_output("cat-file", "-p", object_name)
+    try:
+        value.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as exc:
+        raise RuntimeError(
+            "secret fixture manifest source blob is not UTF-8"
+        ) from exc
+    return value
+
+
+def secret_fixture_manifest_at_commit(
+    commit: str,
+) -> dict[str, dict[int, tuple[str, str]]]:
+    payload = repository_blob_at_commit(
+        commit,
+        SECRET_FIXTURE_MANIFEST_PATH,
+        max_bytes=MAX_SECRET_FIXTURE_MANIFEST_BYTES,
+    )
+    if payload is None:
+        return {}
+    return parse_secret_fixture_manifest(payload)
+
+
+def bootstrap_secret_fixture_manifest(
+    change: PlannedChange,
+) -> dict[str, dict[int, tuple[str, str]]]:
+    """Authorize only pre-existing synthetic lines for one manifest bootstrap."""
+    if SECRET_FIXTURE_MANIFEST_PATH not in change.paths:
+        raise RuntimeError(
+            "secret fixture bootstrap requires a changed manifest"
+        )
+    changelog_paths = [
+        path
+        for path in change.paths
+        if re.fullmatch(r"changelogs/fragments/[^/]+\.ya?ml", path)
+    ]
+    disallowed = [
+        path
+        for path in change.paths
+        if path != SECRET_FIXTURE_MANIFEST_PATH
+        and not re.fullmatch(r"changelogs/fragments/[^/]+\.ya?ml", path)
+    ]
+    if disallowed or len(changelog_paths) > 1:
+        raise RuntimeError(
+            "secret fixture bootstrap may change only the manifest and one "
+            "changelog fragment"
+        )
+    if secret_fixture_manifest_at_commit(change.base_tip):
+        raise RuntimeError(
+            "secret fixture bootstrap requires an absent base manifest"
+        )
+    manifest = secret_fixture_manifest_at_commit(change.head_commit)
+    if not manifest:
+        raise RuntimeError(
+            "secret fixture bootstrap requires a committed head manifest"
+        )
+    for path, entries in manifest.items():
+        if path in change.paths:
+            raise RuntimeError(
+                "secret fixture bootstrap may classify only unchanged base files"
+            )
+        source = repository_blob_at_commit(
+            change.base_tip,
+            path,
+            max_bytes=MAX_SECRET_FIXTURE_SOURCE_BYTES,
+        )
+        if source is None:
+            raise RuntimeError(
+                f"secret fixture bootstrap source is absent from base: {path}"
+            )
+        source_lines = source.splitlines()
+        for line_number, (_digest, line) in entries.items():
+            if (
+                line_number > len(source_lines)
+                or source_lines[line_number - 1] != line
+            ):
+                raise RuntimeError(
+                    "secret fixture bootstrap line is absent from its exact "
+                    f"base position: {path}:{line_number}"
+                )
+    return manifest
+
+
+def secret_fixture_manifest_for_change(
+    change: PlannedChange,
+    *,
+    bootstrap: bool = False,
+) -> dict[str, dict[int, tuple[str, str]]]:
+    if bootstrap:
+        return bootstrap_secret_fixture_manifest(change)
+    if SECRET_FIXTURE_MANIFEST_PATH in change.paths:
+        raise RuntimeError(
+            "secret fixture manifest changes require the explicit audited "
+            "bootstrap review path"
+        )
+    return secret_fixture_manifest_at_commit(change.base_tip)
+
+
+def mask_documented_secret_fixture_lines(
+    value: str,
+    documented: dict[str, dict[int, tuple[str, str]]],
+    *,
+    path: Optional[str] = None,
+    diff: bool = False,
+) -> str:
+    if diff:
+        return mask_documented_secret_fixture_diff(value, documented)
+    entries = documented.get(path or "", {})
+    if not entries:
+        return value
+    masked: list[str] = []
+    for line_number, line in enumerate(value.splitlines(), start=1):
+        if documented_secret_fixture_matches(
+            documented,
+            path,
+            line_number,
+            line,
+        ):
+            masked.append("DOCUMENTED_SYNTHETIC_FIXTURE")
+        else:
+            masked.append(line)
+    return "\n".join(masked)
+
+
+def documented_secret_fixture_matches(
+    documented: dict[str, dict[int, tuple[str, str]]],
+    path: Optional[str],
+    line_number: int,
+    line: str,
+) -> bool:
+    if path is None:
+        return False
+    entry = documented.get(path, {}).get(line_number)
+    return entry is not None and sha256_text(line) == entry[0]
+
+
+def mask_documented_secret_fixture_diff(
+    diff: str,
+    documented: dict[str, dict[int, tuple[str, str]]],
+) -> str:
+    """Mask documented lines only inside their exact old/new diff path."""
+    if not documented:
+        return diff
+    masked: list[str] = []
+    old_path: Optional[str] = None
+    new_path: Optional[str] = None
+    old_line_number = 0
+    new_line_number = 0
+    in_hunk = False
+    for line in diff.splitlines():
+        if line.startswith("diff --git "):
+            old_path = None
+            new_path = None
+            in_hunk = False
+        elif not in_hunk and line.startswith("--- "):
+            old_path = unquote_diff_path(line[4:], "a")
+        elif not in_hunk and line.startswith("+++ "):
+            new_path = unquote_diff_path(line[4:], "b")
+        elif line.startswith("@@"):
+            if old_path is None and new_path is None:
+                raise RuntimeError("planned diff hunk has no governed file path")
+            hunk = re.match(
+                r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@",
+                line,
+            )
+            if hunk is None:
+                raise RuntimeError("planned diff has a malformed hunk header")
+            old_line_number = int(hunk.group(1))
+            new_line_number = int(hunk.group(2))
+            in_hunk = True
+        elif in_hunk and line[:1] in {"+", "-", " "}:
+            if line.startswith("+"):
+                path = new_path
+                line_number = new_line_number
+                new_line_number += 1
+            elif line.startswith("-"):
+                path = old_path
+                line_number = old_line_number
+                old_line_number += 1
+            else:
+                path = old_path or new_path
+                line_number = old_line_number or new_line_number
+                old_line_number += 1
+                new_line_number += 1
+            if documented_secret_fixture_matches(
+                documented,
+                path,
+                line_number,
+                line[1:],
+            ):
+                masked.append("DOCUMENTED_SYNTHETIC_FIXTURE")
+                continue
+        masked.append(line)
+    return "\n".join(masked)
+
+
+def ensure_review_safe(
+    change: PlannedChange,
+    documented: Optional[dict[str, dict[int, tuple[str, str]]]] = None,
+) -> None:
     unsafe = []
     for path in change.paths:
         lowered = path.lower()
@@ -1864,13 +2278,20 @@ def ensure_review_safe(change: PlannedChange) -> None:
             "local review refused for secret-like paths: "
             + ", ".join(sorted(unsafe))
         )
-    if any(pattern.search(change.diff) for pattern in SECRET_CONTENT_PATTERNS):
+    scanned_diff = mask_documented_secret_fixture_lines(
+        change.diff,
+        documented or {},
+        diff=True,
+    )
+    if any(pattern.search(scanned_diff) for pattern in SECRET_CONTENT_PATTERNS):
         raise RuntimeError(
             "local review refused because the planned review input contains "
             "secret-like content"
         )
-    if any(Path(path).name.lower() == ".npmrc" for path in change.paths) \
-        and NPMRC_AUTH_PATTERN.search(change.diff):
+    if (
+        any(Path(path).name.lower() == ".npmrc" for path in change.paths)
+        and NPMRC_AUTH_PATTERN.search(change.diff)
+    ):
         raise RuntimeError(
             "local review refused because planned .npmrc content contains "
             "authentication configuration"
@@ -2085,9 +2506,17 @@ def require_history_free_review_workspace(
 
 
 @contextlib.contextmanager
-def sanitized_review_workspace(change: PlannedChange):
+def sanitized_review_workspace(
+    change: PlannedChange,
+    *,
+    bootstrap_secret_fixtures: bool = False,
+):
     """Yield a scanned, history-free snapshot plus verified hash topology."""
     assert_safe_git_configuration(ROOT)
+    documented = secret_fixture_manifest_for_change(
+        change,
+        bootstrap=bootstrap_secret_fixtures,
+    )
     source_status = git_output(
         "status",
         "--porcelain=v1",
@@ -2175,11 +2604,14 @@ def sanitized_review_workspace(change: PlannedChange):
         )
         if verified_workspace_commit != topology.workspace_commit:
             raise RuntimeError("sanitized review root changed during verification")
-        ensure_workspace_review_safe(workspace)
+        ensure_workspace_review_safe(workspace, documented)
         yield workspace, root, topology
 
 
-def ensure_workspace_review_safe(workspace: Path) -> None:
+def ensure_workspace_review_safe(
+    workspace: Path,
+    documented: Optional[dict[str, dict[int, tuple[str, str]]]] = None,
+) -> None:
     """Scan the complete tracked review snapshot before external model use."""
     names = git_output_at(workspace, "ls-files", "-z").split("\0")
     total = 0
@@ -2222,7 +2654,12 @@ def ensure_workspace_review_safe(workspace: Path) -> None:
                 "local review refused because tracked .npmrc contains "
                 "authentication configuration"
             )
-        if any(pattern.search(text_value) for pattern in SECRET_CONTENT_PATTERNS):
+        scanned_value = mask_documented_secret_fixture_lines(
+            text_value,
+            documented or {},
+            path=name,
+        )
+        if any(pattern.search(scanned_value) for pattern in SECRET_CONTENT_PATTERNS):
             raise RuntimeError(
                 "local review refused because the tracked review snapshot "
                 f"contains secret-like content in {name}"
@@ -3032,13 +3469,19 @@ def codex_review(
 
 
 def run_agent_reviews(
-    config: dict[str, Any], change: PlannedChange
+    config: dict[str, Any],
+    change: PlannedChange,
+    *,
+    bootstrap_secret_fixtures: bool = False,
 ) -> list[dict[str, Any]]:
     expected = change.tree_fingerprint
     if tree_fingerprint() != expected:
         raise RuntimeError("exact planned push patch is stale before local review")
     reviews: list[dict[str, Any]] = []
-    with sanitized_review_workspace(change) as (
+    with sanitized_review_workspace(
+        change,
+        bootstrap_secret_fixtures=bootstrap_secret_fixtures,
+    ) as (
         workspace,
         state_root,
         topology,
@@ -3172,9 +3615,12 @@ def write_evidence(
     integration_tree: str,
     integration_commit: str,
     integration_fingerprint: str,
+    secret_fixture_bootstrap: bool = False,
 ) -> None:
     evidence = evidence_path()
     evidence.parent.mkdir(parents=True, exist_ok=True)
+    if not isinstance(secret_fixture_bootstrap, bool):
+        raise RuntimeError("secret fixture bootstrap evidence flag is invalid")
     if tree_fingerprint() != change.tree_fingerprint:
         raise RuntimeError("exact planned push patch is stale before evidence write")
     completed_at = now_utc()
@@ -3206,6 +3652,7 @@ def write_evidence(
         "parity_gaps": list(PARITY_GAPS),
         "remote_pr_review_authoritative": True,
         "push_scope": "clean-head",
+        "secret_fixture_bootstrap": secret_fixture_bootstrap,
         "evidence_trust": LOCAL_EVIDENCE_TRUST,
     }
     evidence.write_text(
@@ -3250,7 +3697,19 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError(
             f"push-ready evidence is outside the allowed age of {max_age} seconds"
         )
-    change = planned_change(config)
+    secret_fixture_bootstrap = payload.get("secret_fixture_bootstrap")
+    if not isinstance(secret_fixture_bootstrap, bool):
+        raise RuntimeError(
+            "push-ready evidence secret_fixture_bootstrap is invalid"
+        )
+    change = planned_change(
+        config,
+        bootstrap_secret_fixtures=secret_fixture_bootstrap,
+    )
+    require_trusted_check_policy(
+        change,
+        allow_secret_fixture_bootstrap=secret_fixture_bootstrap,
+    )
     expected_integration = expected_integration_tree(change)
     expected = {
         "config_sha256": config_sha256(),
@@ -3276,6 +3735,7 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
         "parity_gaps": list(PARITY_GAPS),
         "remote_pr_review_authoritative": True,
         "push_scope": "clean-head",
+        "secret_fixture_bootstrap": secret_fixture_bootstrap,
         "evidence_trust": LOCAL_EVIDENCE_TRUST,
     }
     for key, value in expected.items():
@@ -3489,11 +3949,31 @@ def main() -> int:
         "--remote-url",
         help="remote URL supplied as pre-push hook argv[2]",
     )
+    parser.add_argument(
+        "--bootstrap-secret-fixtures",
+        action="store_true",
+        help=(
+            "review and evidence-bind one manifest-only classification of "
+            "synthetic lines that already exist on the authoritative base"
+        ),
+    )
     args = parser.parse_args()
     try:
         if args.base and args.command != "review":
             raise RuntimeError(
                 "--base is diagnostic-only and may be used only with `review`"
+            )
+        if args.bootstrap_secret_fixtures and args.command not in {
+            "review",
+            "push-ready",
+        }:
+            raise RuntimeError(
+                "--bootstrap-secret-fixtures may be used only with `review` "
+                "or `push-ready`"
+            )
+        if args.bootstrap_secret_fixtures and args.base:
+            raise RuntimeError(
+                "secret fixture bootstrap may not override the authoritative base"
             )
         if args.command == "sync-instructions":
             sync_instructions()
@@ -3531,16 +4011,32 @@ def main() -> int:
             execute_integration_checks(config, change)
             return 0
         if args.command == "review":
-            change = planned_change(config, base_override=args.base)
-            run_agent_reviews(config, change)
+            if args.bootstrap_secret_fixtures:
+                require_clean_head()
+            change = planned_change(
+                config,
+                base_override=args.base,
+                bootstrap_secret_fixtures=args.bootstrap_secret_fixtures,
+            )
+            run_agent_reviews(
+                config,
+                change,
+                bootstrap_secret_fixtures=args.bootstrap_secret_fixtures,
+            )
             return 0
         require_clean_head()
         original_head = git_output("rev-parse", "HEAD").strip()
         original_branch = current_branch_ref()
         original_tree_fingerprint = tree_fingerprint()
         refresh_authoritative_base(config)
-        change = planned_change(config)
-        require_trusted_check_policy(change)
+        change = planned_change(
+            config,
+            bootstrap_secret_fixtures=args.bootstrap_secret_fixtures,
+        )
+        require_trusted_check_policy(
+            change,
+            allow_secret_fixture_bootstrap=args.bootstrap_secret_fixtures,
+        )
         started_at = now_utc()
         started = time.monotonic()
         (
@@ -3560,8 +4056,15 @@ def main() -> int:
             raise RuntimeError(
                 "deterministic checks changed the reviewed branch or Git tree"
             )
-        change = planned_change(config)
-        reviews = run_agent_reviews(config, change)
+        change = planned_change(
+            config,
+            bootstrap_secret_fixtures=args.bootstrap_secret_fixtures,
+        )
+        reviews = run_agent_reviews(
+            config,
+            change,
+            bootstrap_secret_fixtures=args.bootstrap_secret_fixtures,
+        )
         write_evidence(
             config,
             checks,
@@ -3572,6 +4075,7 @@ def main() -> int:
             integration_tree=integration_tree,
             integration_commit=integration_commit,
             integration_fingerprint=integration_fingerprint,
+            secret_fixture_bootstrap=args.bootstrap_secret_fixtures,
         )
         verify_evidence(config)
         print(f"Push-ready evidence: {evidence_path()}")
