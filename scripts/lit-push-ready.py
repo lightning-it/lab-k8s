@@ -941,10 +941,15 @@ def minimal_check_environment(state_root: Path) -> dict[str, str]:
     temporary.mkdir(mode=0o700)
     environment = {
         "CI": "1",
+        # Checks run in a disposable PR-merge worktree.  They must never
+        # wait for an interactive pager when the caller has a TTY.
+        "GIT_PAGER": "cat",
+        "GIT_TERMINAL_PROMPT": "0",
         "HOME": str(home),
         "LANG": "C",
         "LC_ALL": "C",
         "PATH": path_value,
+        "PAGER": "cat",
         "TMPDIR": str(temporary),
     }
     selected_engine = os.environ.get("WUNDER_CONTAINER_ENGINE")
