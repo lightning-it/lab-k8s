@@ -4,10 +4,7 @@
   "checks": [
     {
       "name": "repository-quality-profile",
-      "command": [
-        "scripts/lit-ci-profile.sh",
-        "repository-quality"
-      ]
+      "command": ["scripts/lit-ci-profile.sh", "repository-quality"]
     }
   ],
   "remote_only_checks": [
@@ -36,17 +33,13 @@
     "copilot": {
       "enabled": true,
       "required": true,
-      "command": [
-        "copilot"
-      ],
+      "command": ["copilot"],
       "timeout_seconds": 600
     },
     "codex": {
       "enabled": true,
       "required": true,
-      "command": [
-        "codex"
-      ],
+      "command": ["codex"],
       "timeout_seconds": 900
     }
   }
