@@ -350,11 +350,24 @@ def check_packer(repo_type: str) -> None:
     if not pkr_files:
         print("No root *.pkr.hcl files found; treating repository as template placeholder")
         return
-    if shutil_which("packer"):
-        run(["packer", "fmt", "-check", "."])
-        run(["packer", "validate", "-syntax-only", "."])
-    else:
-        print("Packer CLI not installed; checked Packer file presence only")
+    packer_path = shutil_which("packer")
+    if not packer_path:
+        print("HashiCorp Packer CLI not installed; checked Packer file presence only")
+        return
+
+    version = subprocess.run(
+        [packer_path, "version"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if version.returncode != 0 or not re.search(r"^Packer v[0-9]", version.stdout):
+        print("HashiCorp Packer CLI not installed; checked Packer file presence only")
+        return
+
+    run([packer_path, "fmt", "-check", "."])
+    run([packer_path, "validate", "-syntax-only", "."])
 
 
 def check_markdown() -> None:
