@@ -59,7 +59,7 @@ AGENTS = ROOT / "AGENTS.md"
 PASS_MARKER = "PUSH_READY: PASS"
 BLOCKED_MARKER = "PUSH_READY: BLOCKED"
 CONTRACT_LINE = "<!-- Managed contract: Codex and Copilot must apply AGENTS.md. -->"
-SECRET_PATH_PARTS = {
+SECRET_PATH_FRAGMENTS = {
     ".env",
     ".netrc",
     ".pypirc",
@@ -69,9 +69,12 @@ SECRET_PATH_PARTS = {
     "id_ed25519",
     "id_rsa",
     "kubeconfig",
-    "secrets",
     "vault-password",
 }
+SECRET_PATH_MARKER = "secrets"
+SAFE_TERRAFORM_SECRET_MODULE_PATTERN = re.compile(
+    r"[a-z0-9][a-z0-9_]*_secrets\.tf"
+)
 SECRET_CONTENT_PATTERNS = (
     re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
     re.compile(
@@ -194,6 +197,24 @@ class PlannedChange(NamedTuple):
     @property
     def diff_sha256(self) -> str:
         return sha256_text(self.diff)
+
+
+def is_secret_like_path(path: str) -> bool:
+    """Reject secret markers except in Terraform source-module filenames."""
+    lowered = path.lower()
+    if any(fragment in lowered for fragment in SECRET_PATH_FRAGMENTS):
+        return True
+    components = Path(lowered).parts
+    for index, component in enumerate(components):
+        if SECRET_PATH_MARKER not in component:
+            continue
+        if (
+            index == len(components) - 1
+            and SAFE_TERRAFORM_SECRET_MODULE_PATTERN.fullmatch(component)
+        ):
+            continue
+        return True
+    return False
 
 
 class ReviewTopology(NamedTuple):
@@ -2036,9 +2057,8 @@ def parse_secret_fixture_manifest(
             or not path.startswith(SECRET_FIXTURE_PATH_PREFIXES)
         ):
             raise RuntimeError("secret fixture manifest contains an unsafe path")
-        lowered = path.lower()
         if (
-            any(part in lowered for part in SECRET_PATH_PARTS)
+            is_secret_like_path(path)
             or Path(path).name.lower() == ".npmrc"
         ):
             raise RuntimeError(
@@ -2295,8 +2315,7 @@ def ensure_review_safe(
 ) -> None:
     unsafe = []
     for path in change.paths:
-        lowered = path.lower()
-        if any(part in lowered for part in SECRET_PATH_PARTS):
+        if is_secret_like_path(path):
             unsafe.append(path)
     if unsafe:
         raise RuntimeError(
