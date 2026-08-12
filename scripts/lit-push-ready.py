@@ -1268,7 +1268,7 @@ def git_tree_entry(commit: str, path: str) -> str:
 def require_trusted_check_policy(
     change: PlannedChange,
     *,
-    allow_secret_fixture_bootstrap: bool = False,
+    allow_fixture_manifest_bootstrap: bool = False,
 ) -> None:
     """Refuse local host execution when executable policy differs from base."""
     try:
@@ -1290,7 +1290,7 @@ def require_trusted_check_policy(
     for path in policy_paths:
         if (
             path == SECRET_FIXTURE_MANIFEST_PATH
-            and allow_secret_fixture_bootstrap
+            and allow_fixture_manifest_bootstrap
         ):
             continue
         base_entry = git_tree_entry(change.base_tip, path)
@@ -1837,7 +1837,7 @@ def planned_change(
     config: dict[str, Any],
     *,
     base_override: Optional[str] = None,
-    bootstrap_secret_fixtures: bool = False,
+    fixture_manifest_bootstrap: bool = False,
 ) -> PlannedChange:
     initial_tree_fingerprint = tree_fingerprint()
     base_ref, base_tip, base_commit = resolve_base(config, base_override)
@@ -1922,7 +1922,7 @@ def planned_change(
         change,
         secret_fixture_manifest_for_change(
             change,
-            bootstrap=bootstrap_secret_fixtures,
+            bootstrap=fixture_manifest_bootstrap,
         ),
     )
     return change
@@ -2142,7 +2142,7 @@ def bootstrap_secret_fixture_manifest(
     """Authorize only pre-existing synthetic lines for one manifest bootstrap."""
     if SECRET_FIXTURE_MANIFEST_PATH not in change.paths:
         raise RuntimeError(
-            "secret fixture bootstrap requires a changed manifest"
+            "fixture manifest bootstrap requires a changed manifest"
         )
     changelog_paths = [
         path
@@ -2157,22 +2157,22 @@ def bootstrap_secret_fixture_manifest(
     ]
     if disallowed or len(changelog_paths) > 1:
         raise RuntimeError(
-            "secret fixture bootstrap may change only the manifest and one "
+            "fixture manifest bootstrap may change only the manifest and one "
             "changelog fragment"
         )
     if secret_fixture_manifest_at_commit(change.base_tip):
         raise RuntimeError(
-            "secret fixture bootstrap requires an absent base manifest"
+            "fixture manifest bootstrap requires an absent base manifest"
         )
     manifest = secret_fixture_manifest_at_commit(change.head_commit)
     if not manifest:
         raise RuntimeError(
-            "secret fixture bootstrap requires a committed head manifest"
+            "fixture manifest bootstrap requires a committed head manifest"
         )
     for path, entries in manifest.items():
         if path in change.paths:
             raise RuntimeError(
-                "secret fixture bootstrap may classify only unchanged base files"
+                "fixture manifest bootstrap may classify only unchanged base files"
             )
         source = repository_blob_at_commit(
             change.base_tip,
@@ -2181,7 +2181,7 @@ def bootstrap_secret_fixture_manifest(
         )
         if source is None:
             raise RuntimeError(
-                f"secret fixture bootstrap source is absent from base: {path}"
+                f"fixture manifest bootstrap source is absent from base: {path}"
             )
         source_lines = source.splitlines()
         for line_number, (_digest, line) in entries.items():
@@ -2190,7 +2190,7 @@ def bootstrap_secret_fixture_manifest(
                 or source_lines[line_number - 1] != line
             ):
                 raise RuntimeError(
-                    "secret fixture bootstrap line is absent from its exact "
+                    "fixture manifest bootstrap line is absent from its exact "
                     f"base position: {path}:{line_number}"
                 )
     return manifest
@@ -2553,13 +2553,13 @@ def require_history_free_review_workspace(
 def sanitized_review_workspace(
     change: PlannedChange,
     *,
-    bootstrap_secret_fixtures: bool = False,
+    fixture_manifest_bootstrap: bool = False,
 ):
     """Yield a scanned, history-free snapshot plus verified hash topology."""
     assert_safe_git_configuration(ROOT)
     documented = secret_fixture_manifest_for_change(
         change,
-        bootstrap=bootstrap_secret_fixtures,
+        bootstrap=fixture_manifest_bootstrap,
     )
     source_status = git_output(
         "status",
@@ -3516,7 +3516,7 @@ def run_agent_reviews(
     config: dict[str, Any],
     change: PlannedChange,
     *,
-    bootstrap_secret_fixtures: bool = False,
+    fixture_manifest_bootstrap: bool = False,
 ) -> list[dict[str, Any]]:
     expected = change.tree_fingerprint
     if tree_fingerprint() != expected:
@@ -3524,7 +3524,7 @@ def run_agent_reviews(
     reviews: list[dict[str, Any]] = []
     with sanitized_review_workspace(
         change,
-        bootstrap_secret_fixtures=bootstrap_secret_fixtures,
+        fixture_manifest_bootstrap=fixture_manifest_bootstrap,
     ) as (
         workspace,
         state_root,
@@ -3659,12 +3659,12 @@ def write_evidence(
     integration_tree: str,
     integration_commit: str,
     integration_fingerprint: str,
-    secret_fixture_bootstrap: bool = False,
+    fixture_manifest_bootstrap: bool = False,
 ) -> None:
     evidence = evidence_path()
     evidence.parent.mkdir(parents=True, exist_ok=True)
-    if not isinstance(secret_fixture_bootstrap, bool):
-        raise RuntimeError("secret fixture bootstrap evidence flag is invalid")
+    if not isinstance(fixture_manifest_bootstrap, bool):
+        raise RuntimeError("fixture manifest bootstrap evidence flag is invalid")
     if tree_fingerprint() != change.tree_fingerprint:
         raise RuntimeError("exact planned push patch is stale before evidence write")
     completed_at = now_utc()
@@ -3696,7 +3696,7 @@ def write_evidence(
         "parity_gaps": list(PARITY_GAPS),
         "remote_pr_review_authoritative": True,
         "push_scope": "clean-head",
-        "secret_fixture_bootstrap": secret_fixture_bootstrap,
+        "fixture_manifest_bootstrap": fixture_manifest_bootstrap,
         "evidence_trust": LOCAL_EVIDENCE_TRUST,
     }
     evidence.write_text(
@@ -3741,18 +3741,18 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError(
             f"push-ready evidence is outside the allowed age of {max_age} seconds"
         )
-    secret_fixture_bootstrap = payload.get("secret_fixture_bootstrap")
-    if not isinstance(secret_fixture_bootstrap, bool):
+    fixture_manifest_bootstrap = payload.get("fixture_manifest_bootstrap")
+    if not isinstance(fixture_manifest_bootstrap, bool):
         raise RuntimeError(
-            "push-ready evidence secret_fixture_bootstrap is invalid"
+            "push-ready evidence fixture_manifest_bootstrap is invalid"
         )
     change = planned_change(
         config,
-        bootstrap_secret_fixtures=secret_fixture_bootstrap,
+        fixture_manifest_bootstrap=fixture_manifest_bootstrap,
     )
     require_trusted_check_policy(
         change,
-        allow_secret_fixture_bootstrap=secret_fixture_bootstrap,
+        allow_fixture_manifest_bootstrap=fixture_manifest_bootstrap,
     )
     expected_integration = expected_integration_tree(change)
     expected = {
@@ -3779,7 +3779,7 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
         "parity_gaps": list(PARITY_GAPS),
         "remote_pr_review_authoritative": True,
         "push_scope": "clean-head",
-        "secret_fixture_bootstrap": secret_fixture_bootstrap,
+        "fixture_manifest_bootstrap": fixture_manifest_bootstrap,
         "evidence_trust": LOCAL_EVIDENCE_TRUST,
     }
     for key, value in expected.items():
@@ -3995,6 +3995,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--bootstrap-secret-fixtures",
+        dest="fixture_manifest_bootstrap",
         action="store_true",
         help=(
             "review and evidence-bind one manifest-only classification of "
@@ -4007,7 +4008,7 @@ def main() -> int:
             raise RuntimeError(
                 "--base is diagnostic-only and may be used only with `review`"
             )
-        if args.bootstrap_secret_fixtures and args.command not in {
+        if args.fixture_manifest_bootstrap and args.command not in {
             "review",
             "push-ready",
         }:
@@ -4015,9 +4016,9 @@ def main() -> int:
                 "--bootstrap-secret-fixtures may be used only with `review` "
                 "or `push-ready`"
             )
-        if args.bootstrap_secret_fixtures and args.base:
+        if args.fixture_manifest_bootstrap and args.base:
             raise RuntimeError(
-                "secret fixture bootstrap may not override the authoritative base"
+                "fixture manifest bootstrap may not override the authoritative base"
             )
         if args.command == "sync-instructions":
             sync_instructions()
@@ -4055,17 +4056,17 @@ def main() -> int:
             execute_integration_checks(config, change)
             return 0
         if args.command == "review":
-            if args.bootstrap_secret_fixtures:
+            if args.fixture_manifest_bootstrap:
                 require_clean_head()
             change = planned_change(
                 config,
                 base_override=args.base,
-                bootstrap_secret_fixtures=args.bootstrap_secret_fixtures,
+                fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
             )
             run_agent_reviews(
                 config,
                 change,
-                bootstrap_secret_fixtures=args.bootstrap_secret_fixtures,
+                fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
             )
             return 0
         require_clean_head()
@@ -4075,11 +4076,11 @@ def main() -> int:
         refresh_authoritative_base(config)
         change = planned_change(
             config,
-            bootstrap_secret_fixtures=args.bootstrap_secret_fixtures,
+            fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
         )
         require_trusted_check_policy(
             change,
-            allow_secret_fixture_bootstrap=args.bootstrap_secret_fixtures,
+            allow_fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
         )
         started_at = now_utc()
         started = time.monotonic()
@@ -4102,12 +4103,12 @@ def main() -> int:
             )
         change = planned_change(
             config,
-            bootstrap_secret_fixtures=args.bootstrap_secret_fixtures,
+            fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
         )
         reviews = run_agent_reviews(
             config,
             change,
-            bootstrap_secret_fixtures=args.bootstrap_secret_fixtures,
+            fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
         )
         write_evidence(
             config,
@@ -4119,7 +4120,7 @@ def main() -> int:
             integration_tree=integration_tree,
             integration_commit=integration_commit,
             integration_fingerprint=integration_fingerprint,
-            secret_fixture_bootstrap=args.bootstrap_secret_fixtures,
+            fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
         )
         verify_evidence(config)
         print(f"Push-ready evidence: {evidence_path()}")
