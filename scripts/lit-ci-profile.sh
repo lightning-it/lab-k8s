@@ -114,13 +114,17 @@ python3 scripts/lit-push-ready.py instructions
 printf '==> Run repository quality in the pinned Devtool\n'
 run_devtools "$quality_network" python3 scripts/lit-repository-quality.py
 
+run_unit_tests() {
+  # Tests may execute temporary command shims. Keep their temporary files on
+  # the fresh executable HOME tmpfs instead of the generic /tmp mount.
+  run_devtools none env TMPDIR=/tmp/wunder "$@"
+}
+
 if [ -d tests ] && find tests -type f -name 'test*.py' -print -quit \
   | grep -q .
 then
   printf '==> Run repository unit tests from tests in the pinned Devtool\n'
-  # Tests may execute temporary command shims. Keep their temporary files on
-  # the fresh executable HOME tmpfs instead of the generic /tmp mount.
-  run_devtools none env TMPDIR=/tmp/wunder \
+  run_unit_tests \
     python3 -m unittest discover -s tests -p 'test*.py'
 fi
 
@@ -128,9 +132,7 @@ if [ -d scripts ] && find scripts -type f -name 'test*.py' -print -quit \
   | grep -q .
 then
   printf '==> Run repository unit tests from scripts in the pinned Devtool\n'
-  # Script tests may execute temporary command shims too. Keep their temporary
-  # files on the fresh executable HOME tmpfs instead of the generic /tmp mount.
-  run_devtools none env TMPDIR=/tmp/wunder \
+  run_unit_tests \
     python3 -m unittest discover -s scripts -p 'test*.py'
 fi
 
