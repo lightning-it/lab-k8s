@@ -114,19 +114,25 @@ python3 scripts/lit-push-ready.py instructions
 printf '==> Run repository quality in the pinned Devtool\n'
 run_devtools "$quality_network" python3 scripts/lit-repository-quality.py
 
-for test_root in tests scripts
-do
-  if [ -d "$test_root" ] && find "$test_root" -type f -name 'test*.py' -print -quit \
-    | grep -q .
-  then
-    printf '==> Run repository unit tests from %s in the pinned Devtool\n' \
-      "$test_root"
-    # Tests may execute temporary command shims. Keep their temporary files on
-    # the fresh executable HOME tmpfs instead of the generic /tmp mount.
-    run_devtools none env TMPDIR=/tmp/wunder \
-      python3 -m unittest discover -s "$test_root" -p 'test*.py'
-  fi
-done
+if [ -d tests ] && find tests -type f -name 'test*.py' -print -quit \
+  | grep -q .
+then
+  printf '==> Run repository unit tests from tests in the pinned Devtool\n'
+  # Tests may execute temporary command shims. Keep their temporary files on
+  # the fresh executable HOME tmpfs instead of the generic /tmp mount.
+  run_devtools none env TMPDIR=/tmp/wunder \
+    python3 -m unittest discover -s tests -p 'test*.py'
+fi
+
+if [ -d scripts ] && find scripts -type f -name 'test*.py' -print -quit \
+  | grep -q .
+then
+  printf '==> Run repository unit tests from scripts in the pinned Devtool\n'
+  # Script tests may execute temporary command shims too. Keep their temporary
+  # files on the fresh executable HOME tmpfs instead of the generic /tmp mount.
+  run_devtools none env TMPDIR=/tmp/wunder \
+    python3 -m unittest discover -s scripts -p 'test*.py'
+fi
 
 printf '==> Validate GitHub Actions workflows in the pinned Devtool\n'
 shopt -s nullglob
