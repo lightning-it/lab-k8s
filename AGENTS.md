@@ -22,9 +22,9 @@ Lightning IT Engineering ADRs as the governing repository contract.
 ## AI model and token governance
 
 Apply `LIT-GEN-GDR-GOV-30-Budget-Conscious-AI-Model-Selection` to every
-substantive Codex or ChatGPT-assisted task. Before investigation, planning,
-tool use, implementation, or delegation, record a compact task profile in the
-task chat: work item, risk (`low`, `normal`, or `high`), smallest sufficient
+substantive Codex or ChatGPT-assisted task. Before investigation, planning, tool
+use, implementation, or delegation, record a compact task profile in the task
+chat: work item, risk (`low`, `normal`, or `high`), smallest sufficient
 model/reasoning choice, rationale, and a concrete escalation condition.
 
 - Use the balanced, lowest reliable capability by default. Escalate to a
