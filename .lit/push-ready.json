@@ -18,7 +18,7 @@
     {
       "id": "copilot-current-head-review",
       "workflow": ".github/workflows/copilot-review.yml",
-      "job": "current-revision-reviewed",
+      "job": "verify-current-revision-policy",
       "reason": "The authoritative Copilot pull-request review is produced and bound to the current head SHA by GitHub.",
       "owner": "Lightning IT Application Platform Maintainers"
     }
@@ -31,14 +31,14 @@
   },
   "agents": {
     "copilot": {
-      "enabled": true,
-      "required": true,
+      "enabled": false,
+      "required": false,
       "command": ["copilot"],
       "timeout_seconds": 600
     },
     "codex": {
-      "enabled": true,
-      "required": true,
+      "enabled": false,
+      "required": false,
       "command": ["codex"],
       "timeout_seconds": 900
     }

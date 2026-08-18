@@ -27,8 +27,13 @@ jobs:
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       (
-        github.actor == 'copilot-pull-request-reviewer' ||
-        github.actor == 'copilot-pull-request-reviewer[bot]' ||
+        (
+          contains(fromJSON('["Copilot","copilot-pull-request-reviewer","copilot-pull-request-reviewer[bot]"]'), github.actor) &&
+          (
+            github.event.review.user.login == 'copilot-pull-request-reviewer[bot]' ||
+            github.event.comment.user.login == 'copilot-pull-request-reviewer[bot]'
+          )
+        ) ||
         contains(fromJSON('["COLLABORATOR","MEMBER","OWNER"]'), github.event.review.author_association) ||
         contains(fromJSON('["COLLABORATOR","MEMBER","OWNER"]'), github.event.comment.author_association)
       )
@@ -40,7 +45,7 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - name: Rerun the canonical pull request gate when needed
+      - name: Rerun the canonical protected gate when needed
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -51,7 +56,7 @@ jobs:
           runs_url="repos/${REPOSITORY}/actions/runs"
 
           for attempt in $(seq 1 10); do
-            response="$(gh api "${runs_url}?event=pull_request&head_sha=${HEAD_SHA}&per_page=100")"
+            response="$(gh api "${runs_url}?event=pull_request_target&head_sha=${HEAD_SHA}&per_page=100")"
             run="$(
               jq -c --arg head_sha "${HEAD_SHA}" --argjson pr "${PR_NUMBER}" '
                 [
@@ -82,5 +87,5 @@ jobs:
             sleep 6
           done
 
-          echo "No canonical pull_request gate found for PR #${PR_NUMBER} at ${HEAD_SHA}." >&2
+          echo "No canonical pull_request_target gate found for PR #${PR_NUMBER} at ${HEAD_SHA}." >&2
           exit 1
