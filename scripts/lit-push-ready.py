@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create exact-diff local pipeline and dual-agent review evidence."""
+"""Create deterministic local pipeline evidence without local AI egress."""
 
 from __future__ import annotations
 
@@ -135,9 +135,9 @@ TRUSTED_CHECK_POLICY_PATHS = (
 PARITY_GAPS = (
     {
         "id": "copilot-review-surface",
-        "local": "GitHub Copilot CLI read-only exact-diff review",
-        "remote": "GitHub Copilot pull-request code review on the current head SHA",
-        "status": "not-identical-by-product-design",
+        "local": "prohibited; deterministic checks only",
+        "remote": "protected current-revision review on the exact head SHA",
+        "status": "remote-only-by-policy",
         "remote_gate_required": True,
     },
     {
@@ -746,9 +746,10 @@ def validate_agent_config(name: str, value: Any) -> None:
         raise RuntimeError(
             f"agents.{name}.enabled and agents.{name}.required must be booleans"
         )
-    if enabled is not True or required is not True:
+    if enabled is not False or required is not False:
         raise RuntimeError(
-            f"agents.{name} must be enabled and required by the v2 policy"
+            f"agents.{name} must remain disabled and not required by the "
+            "local no-AI-egress policy"
         )
     command = validate_command(value.get("command"), f"agents.{name}.command")
     if command != [name]:
@@ -2656,7 +2657,7 @@ def ensure_workspace_review_safe(
     workspace: Path,
     documented: Optional[dict[str, dict[int, tuple[str, str]]]] = None,
 ) -> None:
-    """Scan the complete tracked review snapshot before external model use."""
+    """Scan the complete tracked snapshot before local evidence is accepted."""
     names = git_output_at(workspace, "ls-files", "-z").split("\0")
     total = 0
     unsafe_paths: list[str] = []
@@ -3521,65 +3522,21 @@ def run_agent_reviews(
     expected = change.tree_fingerprint
     if tree_fingerprint() != expected:
         raise RuntimeError("exact planned push patch is stale before local review")
-    reviews: list[dict[str, Any]] = []
+    if any(
+        agent["enabled"] or agent["required"]
+        for agent in config["agents"].values()
+    ):
+        raise RuntimeError("local AI execution is prohibited by policy")
+    # Materialize the exact-patch snapshot so the deterministic secret and
+    # topology guards still fail closed, without invoking any local reviewer.
     with sanitized_review_workspace(
         change,
         fixture_manifest_bootstrap=fixture_manifest_bootstrap,
-    ) as (
-        workspace,
-        state_root,
-        topology,
     ):
-        instructions = tracked_instruction_bundle(workspace)
-        workspace_fingerprint = integration_worktree_fingerprint(
-            workspace,
-            include_ignored=True,
-        )
-        reviews.append(
-            copilot_review(
-                config,
-                change,
-                expected,
-                workspace=workspace,
-                state_root=state_root,
-                instructions=instructions,
-                topology=topology,
-            )
-        )
-        if (
-            integration_worktree_fingerprint(
-                workspace,
-                include_ignored=True,
-            )
-            != workspace_fingerprint
-        ):
-            raise RuntimeError(
-                "Copilot review changed the sanitized exact-patch workspace"
-            )
-        reviews.append(
-            codex_review(
-                config,
-                change,
-                expected,
-                workspace=workspace,
-                state_root=state_root,
-                instructions=instructions,
-                topology=topology,
-            )
-        )
-        if (
-            integration_worktree_fingerprint(
-                workspace,
-                include_ignored=True,
-            )
-            != workspace_fingerprint
-        ):
-            raise RuntimeError(
-                "Codex review changed the sanitized exact-patch workspace"
-            )
+        pass
     if tree_fingerprint() != expected:
-        raise RuntimeError("local agent review changed the reviewed Git tree")
-    return reviews
+        raise RuntimeError("local deterministic review changed the Git tree")
+    return []
 
 
 def command_version(command: list[str]) -> str:
@@ -3627,7 +3584,9 @@ def governed_push_remote_from_url(
         if value.startswith(prefix):
             repository_name = value[len(prefix) :]
             break
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", repository_name):
+    if repository_name != ".github" and not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", repository_name
+    ):
         raise RuntimeError(
             "origin push URL must target a Lightning IT repository on github.com"
         )
@@ -3698,6 +3657,7 @@ def write_evidence(
         "push_scope": "clean-head",
         "fixture_manifest_bootstrap": fixture_manifest_bootstrap,
         "evidence_trust": LOCAL_EVIDENCE_TRUST,
+        "local_ai_egress": "prohibited",
     }
     evidence.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
@@ -3781,6 +3741,7 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
         "push_scope": "clean-head",
         "fixture_manifest_bootstrap": fixture_manifest_bootstrap,
         "evidence_trust": LOCAL_EVIDENCE_TRUST,
+        "local_ai_egress": "prohibited",
     }
     for key, value in expected.items():
         if payload.get(key) != value:
@@ -4068,6 +4029,7 @@ def main() -> int:
                 change,
                 fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
             )
+            print("Deterministic local review passed; no local AI was invoked.")
             return 0
         require_clean_head()
         original_head = git_output("rev-parse", "HEAD").strip()
