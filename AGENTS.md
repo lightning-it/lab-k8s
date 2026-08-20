@@ -17,6 +17,36 @@ Lightning IT Engineering ADRs as the governing repository contract.
   documented protected-environment self-approval for immutable exact-SHA
   plan/apply evidence; it does not allow PR self-review or check bypass.
 
+<!-- LIT REP-60 review governance: start -->
+
+## REP-60 current-revision review governance
+
+- Local validation is deterministic only. It must never invoke Codex, GitHub
+  Copilot, another model, or an external AI endpoint. Authoritative AI review
+  runs only in the protected GitHub pipeline and binds the exact PR head.
+- Lightning IT automation may request and fund one GitHub Copilot review only
+  when the exact PR author is `litroc`, and only at the finalization boundary;
+  intermediate `synchronize` pushes must not trigger AI review. Any finding
+  requires correction and a final current-head re-review. The request is
+  consumed once per head; unavailable or quota-blocked reviews fail closed
+  without an automatic retry. Organization-funded Codex remediation and its
+  single re-review are likewise restricted to `litroc`.
+- Every other human or external contributor supplies any required current-head
+  Copilot review under their own entitlement and cost. Lightning IT verifies
+  valid evidence but never requests or funds that review, and personal tokens or
+  provider keys never enter Actions.
+- A same-repository PR authored exactly by
+  `lightning-it-release-automation[bot]` uses only the protected MLX-90 §7.2
+  Exact-Revision Codex check. It must never request Copilot or synthesize a
+  Copilot success.
+- A proven ancestry-only main-to-develop backmerge uses the deterministic
+  evidence-bound exemption and performs zero AI calls. Unknown automation
+  identities fail closed.
+- The only neutral merge-gate result is `Current revision review`. Missing,
+  stale, ambiguous, or unresolved review evidence blocks the merge.
+
+<!-- LIT REP-60 review governance: end -->
+
 <!-- LIT AI task governance: start -->
 
 ## AI model and token governance
