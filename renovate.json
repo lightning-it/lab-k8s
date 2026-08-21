@@ -52,6 +52,22 @@
       "matchDepNames": ["python"],
       "allowedVersions": "/^3\\.14(?:\\.\\d+)?$/",
       "groupName": "python 3.14 lockfile runtimes"
+    },
+    {
+      "description": "Do not update shared-assets-owned workflow files downstream",
+      "matchManagers": ["github-actions"],
+      "matchFileNames": [
+        ".github/workflows/codex-copilot-remediation.yml",
+        ".github/workflows/copilot-review-refresh.yml",
+        ".github/workflows/copilot-review.yml",
+        ".github/workflows/current-revision-rerun.yml",
+        ".github/workflows/openssf-scorecard.yml",
+        ".github/workflows/release-bot-exact-head-review.yml",
+        ".github/workflows/renovate-guarded-automerge.yml",
+        ".github/workflows/repository-quality.yml",
+        ".github/workflows/shared-assets-guarded-automerge.yml"
+      ],
+      "enabled": false
     }
   ]
 }
