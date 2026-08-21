@@ -63,14 +63,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           [[ "${BASE_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${HEAD_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${PR_BASE_REF}" =~ ^(develop|main)$ ]]
           [[ "${PR_NUMBER}" =~ ^[1-9][0-9]*$ ]]
           runs_url="repos/${REPOSITORY}/actions/runs"
+          refresh_url="${GITHUB_SERVER_URL}/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
           neutral_pages="$(gh api --paginate --slurp \
             "repos/${REPOSITORY}/commits/${HEAD_SHA}/check-runs?check_name=Current%20revision%20review&filter=all&per_page=100")"
@@ -82,107 +85,89 @@ jobs:
           ' <<<"${neutral_pages}")"
           neutral_count="$(jq 'length' <<<"${neutral}")"
           if [ "${neutral_count}" -gt 1 ]; then
-            if jq -e \
-              --arg repository "${REPOSITORY}" \
-              --arg server "${GITHUB_SERVER_URL}" '
-                .[0] as $first
-                | ($first.external_id | type) == "string"
-                and ($first.external_id | length) > 0
-                and ($first.output.title | type) == "string"
-                and ($first.output.summary | type) == "string"
-                and all(.[];
-                  .status == "completed"
-                  and .conclusion == "success"
-                  and .external_id == $first.external_id
-                  and .output.title == $first.output.title
-                  and .output.summary == $first.output.summary
-                  and .details_url == ($server + "/" + $repository + "/runs/" + (.id | tostring)))
-              ' <<<"${neutral}" >/dev/null; then
-              echo "Equivalent duplicate protected evidence detected; validating one canonical copy."
-              neutral="$(jq -c 'sort_by(.id) | [last]' <<<"${neutral}")"
-              neutral_count=1
-            else
-              evidence="$(jq -cn --arg base "${BASE_SHA}" --arg head "${HEAD_SHA}" \
-                '{schema:4,base_sha:$base,head_sha:$head,
-                  reason:"ambiguous duplicate protected review evidence"}')"
-              invalidation_failed=0
-              while read -r duplicate_check_id; do
-                if ! [[ "${duplicate_check_id}" =~ ^[1-9][0-9]*$ ]]; then
-                  echo "Invalid duplicate check-run id: ${duplicate_check_id}." >&2
-                  invalidation_failed=1
-                  continue
-                fi
-                duplicate_check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${duplicate_check_id}"
-                if ! invalidated="$(gh api --method PATCH \
-                    "repos/${REPOSITORY}/check-runs/${duplicate_check_id}" \
-                    -f status=completed \
-                    -f conclusion=failure \
-                    -f "details_url=${duplicate_check_url}" \
-                    -f 'output[title]=Current revision review invalidated' \
-                    -f "output[summary]=${evidence}")"; then
-                  echo "Unable to invalidate duplicate check ${duplicate_check_id}." >&2
-                  invalidation_failed=1
-                  continue
-                fi
-                if ! jq -e \
-                  --arg evidence "${evidence}" \
-                  --arg head "${HEAD_SHA}" \
-                  --arg url "${duplicate_check_url}" \
-                  --argjson check_id "${duplicate_check_id}" '
-                    .id == $check_id
-                    and .name == "Current revision review"
-                    and .app.id == 15368
-                    and .app.slug == "github-actions"
-                    and .head_sha == $head
-                    and .status == "completed"
-                    and .conclusion == "failure"
-                    and .details_url == $url
-                    and .output.summary == $evidence
-                  ' <<<"${invalidated}" >/dev/null; then
-                  echo "Duplicate check ${duplicate_check_id} did not confirm invalidation." >&2
-                  invalidation_failed=1
-                fi
-              done < <(jq -r '.[].id' <<<"${neutral}")
-              if ! verified_pages="$(gh api --paginate --slurp \
-                  "repos/${REPOSITORY}/commits/${HEAD_SHA}/check-runs?check_name=Current%20revision%20review&filter=all&per_page=100")"; then
-                echo "Unable to re-read duplicate protected checks after invalidation." >&2
+            evidence="$(jq -cn --arg base "${BASE_SHA}" --arg head "${HEAD_SHA}" \
+              '{schema:4,base_sha:$base,head_sha:$head,
+                reason:"ambiguous duplicate protected review evidence"}')"
+            invalidation_failed=0
+            while read -r duplicate_check_id; do
+              if ! [[ "${duplicate_check_id}" =~ ^[1-9][0-9]*$ ]]; then
+                echo "Invalid duplicate check-run id: ${duplicate_check_id}." >&2
                 invalidation_failed=1
-              elif ! jq -e \
+                continue
+              fi
+              if ! invalidated="$(gh api --method PATCH \
+                  "repos/${REPOSITORY}/check-runs/${duplicate_check_id}" \
+                  -f status=completed \
+                  -f conclusion=failure \
+                  -f "details_url=${refresh_url}" \
+                  -f 'output[title]=Current revision review invalidated' \
+                  -f "output[summary]=${evidence}")"; then
+                echo "Unable to invalidate duplicate check ${duplicate_check_id}." >&2
+                invalidation_failed=1
+                continue
+              fi
+              if ! jq -e \
                 --arg evidence "${evidence}" \
                 --arg head "${HEAD_SHA}" \
-                --arg repository "${REPOSITORY}" \
-                --arg server "${GITHUB_SERVER_URL}" \
-                --argjson expected "${neutral}" '
-                  [.[].check_runs[]? |
-                    select(.name == "Current revision review") |
-                    select(.app.id == 15368 and .app.slug == "github-actions") |
-                    select(.head_sha == $head)] as $current |
-                  ([$current[].id] | sort) == ([$expected[].id] | sort)
-                  and ($current | length) == ($expected | length)
-                  and all($current[];
-                    .status == "completed"
-                    and .conclusion == "failure"
-                    and .details_url == ($server + "/" + $repository + "/runs/" + (.id | tostring))
-                    and .output.summary == $evidence)
-                ' <<<"${verified_pages}" >/dev/null; then
-                echo "Not every duplicate protected check is verifiably invalidated." >&2
+                --arg url "${refresh_url}" \
+                --argjson check_id "${duplicate_check_id}" '
+                  .id == $check_id
+                  and .name == "Current revision review"
+                  and .app.id == 15368
+                  and .app.slug == "github-actions"
+                  and .head_sha == $head
+                  and .status == "completed"
+                  and .conclusion == "failure"
+                  and .details_url == $url
+                  and .output.summary == $evidence
+                ' <<<"${invalidated}" >/dev/null; then
+                echo "Duplicate check ${duplicate_check_id} did not confirm invalidation." >&2
                 invalidation_failed=1
               fi
-              if [ "${invalidation_failed}" -ne 0 ]; then
-                echo "Duplicate-check invalidation was incomplete; remaining fail-closed." >&2
-              fi
-              echo "Multiple non-equivalent protected Current revision review checks exist for ${HEAD_SHA}." >&2
-              exit 1
+            done < <(jq -r '.[].id' <<<"${neutral}")
+            if ! verified_pages="$(gh api --paginate --slurp \
+                "repos/${REPOSITORY}/commits/${HEAD_SHA}/check-runs?check_name=Current%20revision%20review&filter=all&per_page=100")"; then
+              echo "Unable to re-read duplicate protected checks after invalidation." >&2
+              invalidation_failed=1
+            elif ! jq -e \
+              --arg evidence "${evidence}" \
+              --arg head "${HEAD_SHA}" \
+              --arg url "${refresh_url}" \
+              --argjson expected "${neutral}" '
+                [.[].check_runs[]? |
+                  select(.name == "Current revision review") |
+                  select(.app.id == 15368 and .app.slug == "github-actions") |
+                  select(.head_sha == $head)] as $current |
+                ([$current[].id] | sort) == ([$expected[].id] | sort)
+                and ($current | length) == ($expected | length)
+                and all($current[];
+                  .status == "completed"
+                  and .conclusion == "failure"
+                  and .details_url == $url
+                  and .output.summary == $evidence)
+              ' <<<"${verified_pages}" >/dev/null; then
+              echo "Not every duplicate protected check is verifiably invalidated." >&2
+              invalidation_failed=1
             fi
+            if [ "${invalidation_failed}" -ne 0 ]; then
+              echo "Duplicate-check invalidation was incomplete; remaining fail-closed." >&2
+            fi
+            echo "Multiple protected Current revision review checks exist for ${HEAD_SHA}." >&2
+            exit 1
           fi
           if [ "${neutral_count}" -eq 1 ]; then
             check_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' <<<"${neutral}")"
             check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}"
+            # Managed distribution has its own evidence kind. The sync App may
+            # never satisfy the Copilot branch, and inside lightning-it/.github
+            # it is accepted only as ancestry-backmerge.
             if ! jq -e \
               --arg author "${PR_AUTHOR}" \
               --arg base "${BASE_SHA}" \
               --arg head "${HEAD_SHA}" \
               --arg pr "${PR_NUMBER}" \
+              --arg base_ref "${PR_BASE_REF}" \
+              --arg repository "${REPOSITORY}" \
               --argjson pr_number "${PR_NUMBER}" \
               --arg url "${check_url}" '
                 .[0] as $check
@@ -196,12 +181,24 @@ jobs:
                 and (
                   (
                     (
-                      ($author != "lightning-it-release-automation[bot]"
+                      (($author != "lightning-it-release-automation[bot]"
+                        and $author != "lightning-it-shared-assets-sync[bot]")
                         and ($check.external_id |
                           test("^mlx90-current-revision:copilot:v6:" + $pr
                             + ":[1-9][0-9]*:" + $base + ":" + $head + "$")))
                       or
-                      ($author == "lightning-it-release-automation[bot]"
+                      (($author == "lightning-it-shared-assets-sync[bot]"
+                        and $repository != "lightning-it/.github"
+                        and $base_ref == "develop")
+                        and $summary.review_path
+                          == "deterministic provenance-bound managed distribution exemption"
+                        and ($check.external_id |
+                          test("^mlx90-current-revision:managed-sync:v6:" + $pr
+                            + ":[1-9][0-9]*:" + $base + ":" + $head + "$")))
+                      or
+                      (($author == "lightning-it-release-automation[bot]"
+                        or ($repository == "lightning-it/.github"
+                          and $author == "lightning-it-shared-assets-sync[bot]"))
                         and ($check.external_id |
                           test("^mlx90-current-revision:ancestry-backmerge:v6:"
                             + $pr + ":[1-9][0-9]*:" + $base + ":" + $head + "$")))
@@ -211,12 +208,15 @@ jobs:
                   or
                   (
                     (
-                      ($author != "lightning-it-release-automation[bot]"
+                      (($author != "lightning-it-release-automation[bot]"
+                        and $author != "lightning-it-shared-assets-sync[bot]")
                         and ($check.external_id |
                           test("^mlx90-current-revision:copilot:v5:[1-9][0-9]*:"
                             + $base + ":" + $head + "$")))
                       or
-                      ($author == "lightning-it-release-automation[bot]"
+                      (($author == "lightning-it-release-automation[bot]"
+                        or ($repository == "lightning-it/.github"
+                          and $author == "lightning-it-shared-assets-sync[bot]"))
                         and ($check.external_id |
                           test("^mlx90-current-revision:ancestry-backmerge:v5:"
                             + "[1-9][0-9]*:" + $base + ":" + $head + "$")))
@@ -225,7 +225,8 @@ jobs:
                         and ($check.external_id |
                           test("^mlx90-current-revision:v4:[1-9][0-9]*:[0-9a-f]{64}$")))
                     )
-                    and $summary.pull_request_number == $pr_number
+                    and ((($summary | has("pull_request_number")) | not)
+                      or $summary.pull_request_number == $pr_number)
                   )
                 )
               ' <<<"${neutral}" >/dev/null; then
