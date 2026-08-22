@@ -196,9 +196,8 @@ jobs:
                           test("^mlx90-current-revision:managed-sync:v6:" + $pr
                             + ":[1-9][0-9]*:" + $base + ":" + $head + "$")))
                       or
-                      (($author == "lightning-it-release-automation[bot]"
-                        or ($repository == "lightning-it/.github"
-                          and $author == "lightning-it-shared-assets-sync[bot]"))
+                      (($repository == "lightning-it/.github"
+                        and $author == "lightning-it-shared-assets-sync[bot]")
                         and ($check.external_id |
                           test("^mlx90-current-revision:ancestry-backmerge:v6:"
                             + $pr + ":[1-9][0-9]*:" + $base + ":" + $head + "$")))
@@ -214,9 +213,8 @@ jobs:
                           test("^mlx90-current-revision:copilot:v5:[1-9][0-9]*:"
                             + $base + ":" + $head + "$")))
                       or
-                      (($author == "lightning-it-release-automation[bot]"
-                        or ($repository == "lightning-it/.github"
-                          and $author == "lightning-it-shared-assets-sync[bot]"))
+                      (($repository == "lightning-it/.github"
+                        and $author == "lightning-it-shared-assets-sync[bot]")
                         and ($check.external_id |
                           test("^mlx90-current-revision:ancestry-backmerge:v5:"
                             + "[1-9][0-9]*:" + $base + ":" + $head + "$")))
