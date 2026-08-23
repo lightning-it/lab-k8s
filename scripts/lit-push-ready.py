@@ -380,6 +380,15 @@ def run(
     resolved_environment = env
     if command and command[0] == "git":
         resolved_environment = isolated_git_environment(env)
+        command_root = (cwd or ROOT).resolve()
+        try:
+            command_root.relative_to(ROOT)
+        except ValueError:
+            # The wrapper's linked-worktree binding is valid only for ROOT.
+            # Retaining it for a sanitized repository redirects Git back to
+            # the source checkout and its read-only common object store.
+            for variable in ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE"):
+                resolved_environment.pop(variable, None)
     return subprocess.run(
         command,
         cwd=cwd or ROOT,
