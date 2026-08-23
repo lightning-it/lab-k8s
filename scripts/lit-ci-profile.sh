@@ -109,7 +109,8 @@ esac
 readonly quality_network
 
 printf '==> Verify Codex and Copilot instruction binding\n'
-python3 scripts/lit-push-ready.py instructions
+run_devtools none \
+  python3 scripts/lit-push-ready.py instructions
 
 printf '==> Run repository quality in the pinned Devtool\n'
 run_devtools "$quality_network" python3 scripts/lit-repository-quality.py
