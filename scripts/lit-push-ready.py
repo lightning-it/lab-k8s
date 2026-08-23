@@ -670,8 +670,13 @@ def fetch_authoritative_base(branch: str, base_ref: str) -> subprocess.Completed
     environment.update(
         {
             "GIT_CONFIG_COUNT": "2",
-            "GIT_CONFIG_KEY_1": "http.https://github.com/.extraheader",
-            "GIT_CONFIG_VALUE_1": github_https_authorization(),
+            # Preserve the distributed engine's existing header slot while
+            # adding the container-safe workspace binding. Several managed
+            # repositories validate this credential-placement contract.
+            "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
+            "GIT_CONFIG_VALUE_0": github_https_authorization(),
+            "GIT_CONFIG_KEY_1": "safe.directory",
+            "GIT_CONFIG_VALUE_1": str(ROOT),
         }
     )
     return subprocess.run(
