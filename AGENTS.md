@@ -60,7 +60,8 @@ Lightning IT Engineering ADRs as the governing repository contract.
   centrally managed Devtools, push-ready, and pre-commit dispatchers. A
   dispatcher may inspect Git state and start the pinned container, but it must
   not execute a repository validator through host Python, Node.js, Ansible,
-  Ruff, Mypy, markdownlint, Renovate, or a comparable host runtime.
+  Ruff, a Python type checker, markdownlint, Renovate, or a comparable host
+  runtime.
 - If a required command or compatible version is absent, fail closed. Add and
   pin it in `container-ee-wunder-devtools-ubi9`, release that image normally,
   update the centrally managed digest, and rerun the gate. Host fallbacks,
@@ -69,7 +70,7 @@ Lightning IT Engineering ADRs as the governing repository contract.
   non-privileged. A gate may opt into only its explicit tested minimum. Linked
   Git metadata remains read-only and container Git may trust only
   `/workspace`, never `*`. Executable temporary fixtures use the isolated
-  container home while generic `/tmp` remains `noexec`.
+  container home while generic `/tmp` remains non-executable.
 - The Devtools boundary never makes local Codex, Copilot, or other model calls
   and never receives personal AI credentials.
 
