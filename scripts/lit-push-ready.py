@@ -328,6 +328,9 @@ def isolated_git_environment(
     result.update(trusted_container_git_binding(source))
     result.update(
         {
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "safe.directory",
+            "GIT_CONFIG_VALUE_0": str(ROOT),
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_CONFIG_GLOBAL": os.devnull,
             "GIT_TERMINAL_PROMPT": "0",
@@ -666,9 +669,9 @@ def fetch_authoritative_base(branch: str, base_ref: str) -> subprocess.Completed
     environment = isolated_git_environment()
     environment.update(
         {
-            "GIT_CONFIG_COUNT": "1",
-            "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
-            "GIT_CONFIG_VALUE_0": github_https_authorization(),
+            "GIT_CONFIG_COUNT": "2",
+            "GIT_CONFIG_KEY_1": "http.https://github.com/.extraheader",
+            "GIT_CONFIG_VALUE_1": github_https_authorization(),
         }
     )
     return subprocess.run(

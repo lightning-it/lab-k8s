@@ -48,6 +48,33 @@ Lightning IT Engineering ADRs as the governing repository contract.
 
 <!-- LIT REP-60 review governance: end -->
 
+<!-- LIT Devtools container governance: start -->
+
+## Devtools container execution boundary
+
+- Every deterministic lint, format, type-check, test, build, packaging,
+  policy, and validation workload runs in the digest-pinned Lightning IT
+  Devtools image, locally and in CI. Host-language runtimes never provide
+  acceptance evidence.
+- The host boundary is limited to Git, the supported container engine, and the
+  centrally managed Devtools, push-ready, and pre-commit dispatchers. A
+  dispatcher may inspect Git state and start the pinned container, but it must
+  not execute a repository validator through host Python, Node.js, Ansible,
+  Ruff, Mypy, markdownlint, Renovate, or a comparable host runtime.
+- If a required command or compatible version is absent, fail closed. Add and
+  pin it in `container-ee-wunder-devtools-ubi9`, release that image normally,
+  update the centrally managed digest, and rerun the gate. Host fallbacks,
+  ad-hoc virtual environments, and unpinned helper images are forbidden.
+- Defaults stay read-only, offline, socket-free, capability-dropped, and
+  non-privileged. A gate may opt into only its explicit tested minimum. Linked
+  Git metadata remains read-only and container Git may trust only
+  `/workspace`, never `*`. Executable temporary fixtures use the isolated
+  container home while generic `/tmp` remains `noexec`.
+- The Devtools boundary never makes local Codex, Copilot, or other model calls
+  and never receives personal AI credentials.
+
+<!-- LIT Devtools container governance: end -->
+
 <!-- LIT AI task governance: start -->
 
 ## AI model and token governance
