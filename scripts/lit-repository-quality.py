@@ -11,6 +11,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -33,6 +35,7 @@ QUAY_STATUS_URL = re.compile(
     r"(?:[/?#][^\s)\]}>\"'<]*)?",
     re.IGNORECASE,
 )
+LINKED_GIT_ENVIRONMENT = ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE")
 
 
 def metadata() -> dict[str, str]:
@@ -60,6 +63,29 @@ def run(command: list[str], *, required: bool = True) -> None:
         if result.stderr:
             print(result.stderr, file=sys.stderr)
         raise subprocess.CalledProcessError(result.returncode, command)
+
+
+@contextmanager
+def without_linked_git_environment() -> Iterator[None]:
+    """Keep nested Git commands independent from the mounted source checkout."""
+    previous = {
+        name: os.environ[name]
+        for name in LINKED_GIT_ENVIRONMENT
+        if name in os.environ
+    }
+    for name in LINKED_GIT_ENVIRONMENT:
+        os.environ.pop(name, None)
+    try:
+        yield
+    finally:
+        for name in LINKED_GIT_ENVIRONMENT:
+            os.environ.pop(name, None)
+        os.environ.update(previous)
+
+
+def run_terraform(command: list[str]) -> None:
+    with without_linked_git_environment():
+        run(command)
 
 
 def shutil_which(command: str) -> str | None:
@@ -271,7 +297,7 @@ def check_terraform(repo_type: str) -> None:
                             "Terraform validation workspace may not contain "
                             f"symlinks: {candidate.relative_to(workspace)}"
                         )
-            run(
+            run_terraform(
                 [
                     "terraform",
                     f"-chdir={workspace}",
@@ -302,7 +328,7 @@ def check_terraform(repo_type: str) -> None:
                             "workspace and use a regular dependency lock file"
                         )
                     os.environ["TF_DATA_DIR"] = str(data_dir)
-                    run(
+                    run_terraform(
                         [
                             "terraform",
                             f"-chdir={validation_copy}",
@@ -311,7 +337,7 @@ def check_terraform(repo_type: str) -> None:
                             "-input=false",
                         ]
                     )
-                    run(
+                    run_terraform(
                         [
                             "terraform",
                             f"-chdir={validation_copy}",
