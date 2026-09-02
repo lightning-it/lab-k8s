@@ -42,6 +42,6 @@ This repository follows the Lightning IT shared release and quality model.
 
 ## Release Evidence
 
-Release evidence is disabled because this repository does not publish release artifacts. Evidence records the repository name, repository type, version, tag, commit SHA, workflow run, tested matrix combinations, passed/failed/skipped jobs, built artifacts, published artifacts, changelog link, security scan result, and SBOM/provenance/signature links when available.
+Release evidence is disabled because this repository does not publish release artifacts. When release evidence is enabled for a publishing repository, its records include the repository name, repository type, version, tag, commit SHA, workflow run, tested matrix combinations, passed/failed/skipped jobs, built artifacts, published artifacts, changelog link, security scan result, and SBOM/provenance/signature links when available.
 
 Evidence files must not contain tokens, credentials, private inventory values, or secret material.
