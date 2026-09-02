@@ -14,6 +14,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 MATERIALIZER = ROOT / "scripts/materialize-exact-revision-review.py"
 REVIEW_WORKFLOW = ROOT / ".github/workflows/release-bot-exact-head-review.yml"
+RERUN_WORKFLOW = ROOT / ".github/workflows/current-revision-rerun.yml"
 
 
 def load_materializer() -> types.ModuleType:
@@ -31,6 +32,20 @@ def load_materializer() -> types.ModuleType:
 class ExactRevisionMaterializerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.module = load_materializer()
+
+    def test_protected_review_dependency_closure_is_installed(self) -> None:
+        for path in (MATERIALIZER, REVIEW_WORKFLOW, RERUN_WORKFLOW):
+            with self.subTest(path=path):
+                self.assertTrue(path.is_file())
+                self.assertFalse(path.is_symlink())
+        review = REVIEW_WORKFLOW.read_text(encoding="utf-8")
+        rerun = RERUN_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn(
+            "actions/workflows/current-revision-rerun.yml/dispatches",
+            review,
+        )
+        self.assertIn("workflow_dispatch:", rerun)
+        self.assertIn("rerun-protected-verifier:", rerun)
 
     def test_invalid_runner_temp_does_not_create_review_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
