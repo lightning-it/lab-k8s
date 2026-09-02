@@ -17,8 +17,8 @@ try:
 except ImportError as error:
     raise SystemExit(
         "PyYAML is required for fail-closed embedded YAML validation; run "
-        "scripts/lit-ci-profile.sh repository-quality so the locked Devtools "
-        "dependency set is used"
+        "the repository-local python3 scripts/lit-push-ready.py review "
+        "dispatcher so the locked Devtools dependency set is used"
     ) from error
 
 SCRIPT = Path(__file__).resolve()
