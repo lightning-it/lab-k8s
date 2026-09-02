@@ -36,6 +36,7 @@ QUAY_STATUS_URL = re.compile(
     re.IGNORECASE,
 )
 LINKED_GIT_ENVIRONMENT = ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE")
+EXTERNAL_COMMAND_TIMEOUT_SECONDS = 300
 
 
 def metadata() -> dict[str, str]:
@@ -56,7 +57,30 @@ def run(command: list[str], *, required: bool = True) -> None:
         print(f"Skipping {' '.join(command)}: {command[0]} is not installed")
         return
     print("+ " + " ".join(command))
-    result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+    try:
+        result = subprocess.run(
+            command,
+            cwd=ROOT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            timeout=EXTERNAL_COMMAND_TIMEOUT_SECONDS,
+        )
+    except FileNotFoundError as error:
+        if not required:
+            print(f"Skipping {' '.join(command)}: {command[0]} is not installed")
+            return
+        raise AssertionError(f"Required command not found: {command[0]}") from error
+    except subprocess.TimeoutExpired as error:
+        if error.stdout:
+            print(error.stdout)
+        if error.stderr:
+            print(error.stderr, file=sys.stderr)
+        raise AssertionError(
+            f"{' '.join(command)} timed out after "
+            f"{EXTERNAL_COMMAND_TIMEOUT_SECONDS} seconds"
+        ) from error
     if result.returncode != 0:
         if result.stdout:
             print(result.stdout)
@@ -351,7 +375,9 @@ def check_terraform(repo_type: str) -> None:
                 else:
                     os.environ["TF_DATA_DIR"] = previous_data_dir
     else:
-        print("Terraform CLI not installed; checked Terraform file presence only")
+        raise AssertionError(
+            "Terraform CLI is required for Terraform repository validation"
+        )
 
 
 def check_helm(repo_type: str) -> None:
