@@ -17,8 +17,8 @@ try:
 except ImportError as error:
     raise SystemExit(
         "PyYAML is required for fail-closed embedded YAML validation; run "
-        "the repository-local python3 scripts/lit-push-ready.py review "
-        "dispatcher so the locked Devtools dependency set is used"
+        "the repository-local `scripts/lit-ci-profile.sh repository-quality` "
+        "profile so the locked Devtools dependency set is used"
     ) from error
 
 SCRIPT = Path(__file__).resolve()
@@ -109,7 +109,10 @@ def main() -> int:
                         try:
                             result = subprocess.run(
                                 [ansible_lint, str(candidate)],
+                                cwd=ROOT,
                                 text=True,
+                                encoding="utf-8",
+                                errors="replace",
                                 capture_output=True,
                                 timeout=VALIDATOR_TIMEOUT_SECONDS,
                             )
@@ -150,7 +153,10 @@ def main() -> int:
                     try:
                         result = subprocess.run(
                             [shellcheck, "-x", str(candidate)],
+                            cwd=ROOT,
                             text=True,
+                            encoding="utf-8",
+                            errors="replace",
                             capture_output=True,
                             timeout=VALIDATOR_TIMEOUT_SECONDS,
                         )
