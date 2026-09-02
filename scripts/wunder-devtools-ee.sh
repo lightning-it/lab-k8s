@@ -97,7 +97,11 @@ podman_usable() {
 
 sanitize_docker_host_env
 
+EXPLICIT_CONTAINER_ENGINE=0
 CONTAINER_BIN="${WUNDER_CONTAINER_ENGINE:-}"
+if [ -n "$CONTAINER_BIN" ]; then
+  EXPLICIT_CONTAINER_ENGINE=1
+fi
 if [ -z "$CONTAINER_BIN" ]; then
   if docker_usable; then
     CONTAINER_BIN="docker"
@@ -293,11 +297,25 @@ fi
 SOURCE_ROOT_CONTAINER="${WUNDER_DEVTOOLS_SOURCE_ROOT_CONTAINER:-/sources}"
 mounted_source_root=0
 if [ "$SOURCE_ROOT_POLICY" = enabled ] && [ -d "$SOURCE_ROOT_HOST" ]; then
+  case "$SOURCE_ROOT_CONTAINER" in
+    /*) ;;
+    *) fail_closed "source-root container path must be absolute" ;;
+  esac
+  case "$SOURCE_ROOT_CONTAINER" in
+    *:*)
+      fail_closed "source-root container path contains an unsafe mount delimiter"
+      ;;
+  esac
   shopt -s nullglob
   for collection_dir in "$SOURCE_ROOT_HOST"/ansible-collection-*; do
     [ -d "$collection_dir" ] || continue
     collection_real="$(cd "$collection_dir" && pwd -P)"
     [ "$collection_real" = "$WORKSPACE_REAL" ] && continue
+    case "$collection_real" in
+      *:*)
+        fail_closed "resolved collection source path contains an unsafe mount delimiter"
+        ;;
+    esac
     collection_base="$(basename "$collection_real")"
     collection_mount="${collection_real}:${SOURCE_ROOT_CONTAINER}/${collection_base}:ro"
     if [ "$CONTAINER_BIN" = "podman" ] && [ "$(uname -s)" = "Linux" ]; then
@@ -418,6 +436,12 @@ if [ "$CONTAINER_BIN" = "docker" ]; then
       DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"
       export DOCKER_HOST
     fi
+  fi
+fi
+
+if [ "$EXPLICIT_CONTAINER_ENGINE" = "1" ] && [ "$CONTAINER_BIN" = "docker" ]; then
+  if ! docker_usable; then
+    fail_closed "selected docker engine is not usable"
   fi
 fi
 
