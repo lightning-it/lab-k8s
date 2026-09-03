@@ -90,6 +90,10 @@ Lightning IT Engineering ADRs as the governing repository contract.
   the centrally managed push-ready engine when checking the installed wrapper;
   they never hard-code an independent release tag that can drift during a
   normal image rollout.
+- A target-specific regression test that asserts managed Devtools-wrapper
+  arguments is the same atomic managed unit as the wrapper. Both synchronize
+  through an exact source binding, and only an explicitly digest-allowlisted
+  predecessor may be replaced; unknown target test content fails closed.
 - Defaults stay read-only, offline, socket-free, capability-dropped, and
   non-privileged. A gate may opt into only its explicit tested minimum. Linked
   Git metadata remains read-only and container Git may trust only
