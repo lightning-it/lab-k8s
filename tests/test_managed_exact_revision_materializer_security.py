@@ -46,7 +46,7 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
         )
         self.assertIn("workflow_dispatch:", rerun)
         self.assertIn("rerun-protected-verifier:", rerun)
-        self.assertIn(
+        self.assertNotIn(
             "".join(
                 (
                     "github.ref == format('refs/heads/{0}', ",
@@ -55,8 +55,12 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
             ),
             rerun,
         )
-        self.assertIn(
+        self.assertNotIn(
             'test "${GITHUB_REF}" = "refs/heads/${EVENT_DEFAULT_BRANCH}"',
+            rerun,
+        )
+        self.assertIn(
+            'test "${EXECUTED_WORKFLOW_SHA}" = "${controller_sha}"',
             rerun,
         )
         self.assertNotIn(
