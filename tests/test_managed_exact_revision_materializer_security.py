@@ -46,6 +46,24 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
         )
         self.assertIn("workflow_dispatch:", rerun)
         self.assertIn("rerun-protected-verifier:", rerun)
+        self.assertIn(
+            "github.ref == format('refs/heads/{0}', "
+            "github.event.repository.default_branch)",
+            rerun,
+        )
+        self.assertIn(
+            'test "${GITHUB_REF}" = "refs/heads/${EVENT_DEFAULT_BRANCH}"',
+            rerun,
+        )
+        self.assertNotIn(
+            "github.ref == format('refs/heads/{0}', "
+            "github.event.pull_request.base.ref)",
+            rerun,
+        )
+        self.assertNotIn(
+            'test "${GITHUB_REF}" = "refs/heads/${EVENT_PR_BASE_REF}"',
+            rerun,
+        )
 
     def test_invalid_runner_temp_does_not_create_review_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
