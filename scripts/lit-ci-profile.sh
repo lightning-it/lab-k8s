@@ -4,6 +4,7 @@ set -euo pipefail
 readonly PROFILE_NAME="repository-quality"
 readonly BASE_REF="refs/remotes/origin/develop"
 readonly DEVTOOLS_WRAPPER="scripts/wunder-devtools-ee.sh"
+readonly ACTIONLINT_TIMEOUT_SECONDS=60
 
 fail_closed() {
   printf 'Error: %s\n' "$1" >&2
@@ -146,7 +147,10 @@ workflow_paths=(
 shopt -u nullglob
 [ "${#workflow_paths[@]}" -gt 0 ] \
   || fail_closed "no GitHub Actions workflows were found for actionlint"
-run_devtools none actionlint "${workflow_paths[@]}"
+for workflow in "${workflow_paths[@]}"; do
+  run_devtools none timeout -k 5s "${ACTIONLINT_TIMEOUT_SECONDS}s" \
+    actionlint "$workflow"
+done
 
 printf '==> Validate committed and local diffs\n'
 git diff --check "$merge_base"...HEAD --
