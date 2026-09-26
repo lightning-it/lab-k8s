@@ -659,7 +659,7 @@ def current_branch_ref() -> str:
 
 def fetch_authoritative_base(branch: str, base_ref: str) -> subprocess.CompletedProcess[str]:
     """Fetch one governed base branch through the local GitHub helper."""
-    credential_free_environment = {
+    inspection_environment = {
         name: value
         for name, value in isolated_git_environment().items()
         if name in HTTPS_FETCH_ENVIRONMENT_ALLOWLIST or name.startswith("GIT_")
@@ -670,7 +670,7 @@ def fetch_authoritative_base(branch: str, base_ref: str) -> subprocess.Completed
             ["git", "remote", "get-url", *arguments],
             capture=True,
             timeout=30,
-            env=credential_free_environment,
+            env=inspection_environment,
         )
         if result.returncode:
             raise RuntimeError("cannot inspect governed origin URL")
@@ -693,13 +693,31 @@ def fetch_authoritative_base(branch: str, base_ref: str) -> subprocess.Completed
         f"+refs/heads/{branch}:{base_ref}",
     ]
     if not origin_url.startswith("https://github.com/"):
-        ssh_environment = dict(credential_free_environment)
+        ssh_environment = dict(inspection_environment)
         if "SSH_AUTH_SOCK" in os.environ:
             ssh_environment["SSH_AUTH_SOCK"] = os.environ["SSH_AUTH_SOCK"]
         return run(command, capture=True, timeout=120, env=ssh_environment)
+    fetch_environment = dict(inspection_environment)
+    github_token = os.environ.get("GH_TOKEN")
+    if github_token is None:
+        github_token = os.environ.get("GITHUB_TOKEN")
+    if github_token is not None:
+        if (
+            not github_token
+            or len(github_token) > 4096
+            or any(
+                ord(character) < 32 or ord(character) == 127
+                for character in github_token
+            )
+        ):
+            raise RuntimeError("GitHub HTTPS authentication token is invalid")
+        # GitHub Actions exposes only GITHUB_TOKEN. Normalize either supported
+        # input to the single variable consumed by gh for this fetch process;
+        # remote inspection and every other child stay credential-free.
+        fetch_environment["GH_TOKEN"] = github_token
     # A credential helper may supply the existing local GitHub credential on
-    # demand. The fetch process itself must not inherit provider tokens.
-    credential_free_environment.update(
+    # demand. Only the narrowly scoped fetch receives an ephemeral CI token.
+    fetch_environment.update(
         {
             "GIT_CONFIG_COUNT": "3",
             # Let Git request the existing local credential only when the
@@ -723,7 +741,7 @@ def fetch_authoritative_base(branch: str, base_ref: str) -> subprocess.Completed
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         timeout=120,
-        env=credential_free_environment,
+        env=fetch_environment,
     )
 
 
