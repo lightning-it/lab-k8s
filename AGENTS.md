@@ -60,8 +60,17 @@ Lightning IT Engineering ADRs as the governing repository contract.
   evidence outside that native GitHub history.
 - Only the protected `develop` to `main` promotion creates exactly one durable,
   complete release-evidence package. It binds the full integrated promotion
-  diff, base, head, merge base, integration tree, policy, reviewer result, and
-  all release and audit checks.
+  diff, base, head, merge base, integration tree, policy, the exact native
+  acceptance evidence of every post-baseline ingress PR, and all release and
+  audit checks. It MUST NOT request a second AI review of the cumulative
+  promotion diff or apply the per-review-unit byte limit to that cumulative
+  diff; the limit remains mandatory for each new ingress review unit.
+- After a Release-App `release/vX.Y.Z` merge to `main`, its protected
+  release-published back-sync is the sole owner of `main` to `develop`
+  convergence. The generic ancestry synchronizer MUST detect that exact
+  Release-App source and exit without creating a competing PR. This single
+  ownership rule prevents base drift, conflicting duplicate back-syncs, and
+  human successor branches.
 - Agents, workflows, and repository-local rules MUST NOT duplicate that durable
   evidence per `develop` pull request or invoke local AI to create evidence.
   Repository-local rules may only make this lifecycle stricter.
