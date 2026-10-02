@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import date, datetime, timezone
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -42,6 +43,8 @@ PYTHON_DEPENDENCY_LOCK = ROOT / ".github" / "requirements" / "repository-quality
 PYPI_REQUIREMENT = re.compile(
     r"(?m)^pyyaml==(?P<version>[0-9]+(?:\.[0-9]+)*)[ \\]+$"
 )
+TIMEOUT_POLICY = ROOT / ".lit" / "workflow-timeouts.json"
+TIMEOUT_CLASS_CEILINGS = {"quick": 10, "quality": 30, "build": 60, "heavy": 90}
 
 
 def metadata() -> dict[str, str]:
@@ -157,6 +160,134 @@ def check_python_dependency_lock() -> None:
             "Devtools PyYAML version does not match repository-quality.lock: "
             f"expected {expected}, found {actual}"
         )
+
+
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise AssertionError(f"workflow timeout policy has duplicate key {key!r}")
+        result[key] = value
+    return result
+
+
+def _timeout_policy_day(value: object, field: str) -> date:
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise AssertionError(f"{field} must be an ISO calendar date")
+    try:
+        return date.fromisoformat(value)
+    except ValueError as error:
+        raise AssertionError(f"{field} must be a valid ISO calendar date") from error
+
+
+def check_workflow_timeouts(*, root: Path = ROOT, today: date | None = None) -> None:
+    """Enforce LI-150 when a repository explicitly enables its class manifest."""
+    policy_path = root / ".lit" / "workflow-timeouts.json"
+    if policy_path.parent.is_symlink() or policy_path.is_symlink():
+        raise AssertionError("workflow timeout policy must be a regular file")
+    if not policy_path.exists():
+        return
+    if not policy_path.is_file():
+        raise AssertionError("workflow timeout policy must be a regular file")
+    try:
+        policy = json.loads(
+            policy_path.read_text(encoding="utf-8"),
+            object_pairs_hook=_unique_json_object,
+        )
+    except (ValueError, UnicodeError) as error:
+        raise AssertionError("workflow timeout policy must be valid UTF-8 JSON") from error
+    if not isinstance(policy, dict) or set(policy) != {"version", "jobs", "exceptions"}:
+        raise AssertionError("workflow timeout policy has an invalid schema")
+    if type(policy["version"]) is not int or policy["version"] != 1:
+        raise AssertionError("workflow timeout policy version must be 1")
+    classes, exceptions = policy["jobs"], policy["exceptions"]
+    if not isinstance(classes, dict) or not isinstance(exceptions, dict):
+        raise AssertionError("workflow timeout policy jobs and exceptions must be objects")
+    if today is None:
+        today = datetime.now(timezone.utc).date()
+
+    import yaml
+
+    class UniqueSafeLoader(yaml.SafeLoader):
+        pass
+
+    def unique_mapping(loader: UniqueSafeLoader, node: yaml.MappingNode) -> dict:
+        result = {}
+        for key_node, value_node in node.value:
+            if not isinstance(key_node, yaml.ScalarNode):
+                raise AssertionError("workflow YAML mapping keys must be scalars")
+            # Actions treats mapping keys as identifiers. PyYAML's YAML 1.1
+            # resolver would otherwise turn valid `on`, `off`, `yes` and `no`
+            # job IDs into booleans.
+            key = loader.construct_scalar(key_node)
+            if key in result:
+                raise AssertionError(f"workflow YAML has duplicate key {key!r}")
+            result[key] = loader.construct_object(value_node)
+        return result
+
+    UniqueSafeLoader.add_constructor(
+        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, unique_mapping
+    )
+    seen: set[str] = set()
+    workflow_dir = root / ".github" / "workflows"
+    if workflow_dir.parent.is_symlink() or workflow_dir.is_symlink() or not workflow_dir.is_dir():
+        raise AssertionError("workflow directory must be a regular directory")
+    for path in sorted(workflow_dir.glob("*.y*ml")):
+        if path.is_symlink() or not path.is_file():
+            raise AssertionError(f"workflow must be a regular file: {path.name}")
+        relative = path.relative_to(root).as_posix()
+        try:
+            document = yaml.load(path.read_text(encoding="utf-8"), Loader=UniqueSafeLoader)
+        except (yaml.YAMLError, UnicodeError) as error:
+            raise AssertionError(f"{relative}: invalid workflow YAML") from error
+        if not isinstance(document, dict) or not isinstance(document.get("jobs"), dict):
+            raise AssertionError(f"{relative}: jobs must be an object")
+        for job_id, job in document["jobs"].items():
+            if (not isinstance(job_id, str) or
+                    not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", job_id) or
+                    not isinstance(job, dict)):
+                raise AssertionError(f"{relative}: invalid job entry")
+            key = f"{relative}#{job_id}"
+            if job.get("continue-on-error", False) is not False:
+                raise AssertionError(f"{key}: job-level continue-on-error is forbidden")
+            if "uses" in job:
+                if "timeout-minutes" in job:
+                    raise AssertionError(f"{key}: reusable caller cannot set timeout-minutes")
+                continue
+            seen.add(key)
+            if (key not in classes or not isinstance(classes[key], str) or
+                    classes[key] not in TIMEOUT_CLASS_CEILINGS):
+                raise AssertionError(f"{key}: missing or invalid timeout class")
+            limit = job.get("timeout-minutes")
+            if type(limit) is not int or limit <= 0:
+                raise AssertionError(f"{key}: timeout-minutes must be a positive integer")
+            ceiling = TIMEOUT_CLASS_CEILINGS[classes[key]]
+            exception = exceptions.get(key)
+            if limit <= ceiling:
+                if exception is not None:
+                    raise AssertionError(f"{key}: unnecessary timeout exception")
+                continue
+            if not isinstance(exception, dict) or set(exception) != {
+                "owner", "reason", "measured_minutes", "approved_at", "expires_at", "limit"
+            }:
+                raise AssertionError(f"{key}: over-class timeout needs a complete exception")
+            if any(not isinstance(exception[field], str) or not exception[field].strip()
+                   for field in ("owner", "reason")):
+                raise AssertionError(f"{key}: exception owner and reason are required")
+            measured = exception["measured_minutes"]
+            approved_limit = exception["limit"]
+            if (type(measured) is not int or measured <= 0 or
+                    type(approved_limit) is not int or approved_limit != limit or
+                    measured > approved_limit):
+                raise AssertionError(f"{key}: exception runtime or limit is invalid")
+            approved = _timeout_policy_day(exception["approved_at"], "approved_at")
+            expires = _timeout_policy_day(exception["expires_at"], "expires_at")
+            if approved > today or expires <= today or not 0 < (expires - approved).days <= 30:
+                raise AssertionError(f"{key}: timeout exception is expired or exceeds 30 days")
+    if set(classes) != seen:
+        raise AssertionError("workflow timeout class manifest has missing or stale jobs")
+    if not set(exceptions) <= seen:
+        raise AssertionError("workflow timeout exception manifest has stale jobs")
 
 
 def managed_readme_block(readme: str) -> str:
@@ -621,6 +752,7 @@ def main() -> int:
     try:
         meta = metadata()
         check_python_dependency_lock()
+        check_workflow_timeouts()
         check_generated_docs(meta)
         check_secret_safe_generated_docs()
         check_markdown()
